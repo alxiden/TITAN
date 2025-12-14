@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Add IOC — TITAN</title>
+  <link rel="stylesheet" href="/static/styles.css">
+</head>
+<body>
+  <header>
+    <h1><a href="/">TITAN</a> / <a href="/iocs">IOCs</a> / Add</h1>
+  </header>
+
+  <main>
+    <form method="post" action="{{ action }}" class="form">
+      <div class="form-group">
+        <label for="type">IOC Type *</label>
+        <select name="type" id="type" required>
+          <option value="IP">IP Address</option>
+          <option value="Domain">Domain</option>
+          <option value="URL">URL</option>
+          <option value="Hash">Hash (MD5/SHA1/SHA256)</option>
+          <option value="Email">Email</option>
+          <option value="FilePath">File Path</option>
+        </select>
+      </div>
+
+      <div class="form-group">
+        <label for="value">Value *</label>
+        <input type="text" name="value" id="value" required>
+      </div>
+
+      <div class="form-group">
+        <label for="description">Description</label>
+        <textarea name="description" id="description" rows="3"></textarea>
+      </div>
+
+      <div class="form-group">
+        <label for="confidence">Confidence (0-100)</label>
+        <input type="number" name="confidence" id="confidence" min="0" max="100">
+      </div>
+
+      <div class="form-group">
+        <label for="link_type">Link to (Optional)</label>
+        <select name="link_type" id="link_type" onchange="updateLinkOptions()">
+          <option value="">— None —</option>
+          <option value="malware">Malware</option>
+          <option value="phishing">Phishing</option>
+        </select>
+      </div>
+
+      <div class="form-group" id="malware_select" style="display:none">
+        <label for="malware_id">Select Malware</label>
+        <select name="link_id" id="malware_id">
+          <option value="">— Select —</option>
+          {% for malware in malware_list %}
+          <option value="{{ malware.id }}">{{ malware.name }}</option>
+          {% endfor %}
+        </select>
+      </div>
+
+      <div class="form-group" id="phishing_select" style="display:none">
+        <label for="phishing_id">Select Phishing</label>
+        <select name="link_id" id="phishing_id">
+          <option value="">— Select —</option>
+          {% for phish in phishing_list %}
+          <option value="{{ phish.id }}">{{ phish.subject or 'Phish #' + phish.id|string }}</option>
+          {% endfor %}
+        </select>
+      </div>
+
+      <div class="form-actions">
+        <button type="submit" class="btn btn-primary">Add IOC</button>
+        <a href="/iocs" class="btn">Cancel</a>
+      </div>
+    </form>
+
+    <script>
+      function updateLinkOptions() {
+        const linkType = document.getElementById('link_type').value;
+        document.getElementById('malware_select').style.display = linkType === 'malware' ? 'block' : 'none';
+        document.getElementById('phishing_select').style.display = linkType === 'phishing' ? 'block' : 'none';
+        
+        // Clear the other select
+        if (linkType === 'malware') {
+          document.getElementById('phishing_id').value = '';
+        } else if (linkType === 'phishing') {
+          document.getElementById('malware_id').value = '';
+        }
+      }
+    </script>
+  </main>
+
+  <footer>
+    <p class="muted"><a href="/iocs">← Back to IOCs</a></p>
+  </footer>
+</body>
+</html>

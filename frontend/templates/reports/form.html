@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{{ 'Edit' if report else 'Add' }} Report — TITAN</title>
+  <link rel="stylesheet" href="/static/styles.css">
+</head>
+<body>
+  <header>
+    <h1><a href="/">TITAN</a> / <a href="/reports">Reports</a> / {{ 'Edit' if report else 'Add' }}</h1>
+  </header>
+
+  <main>
+    <form method="post" action="{{ action }}" class="form">
+      <div class="form-group">
+        <label for="title">Title *</label>
+        <input type="text" name="title" id="title" value="{{ report.title if report else '' }}" required>
+      </div>
+
+      <div class="form-group">
+        <label for="tlp">TLP (Traffic Light Protocol)</label>
+        <select name="tlp" id="tlp">
+          <option value="">— Select —</option>
+          <option value="TLP:WHITE" {% if report and report.tlp == 'TLP:WHITE' %}selected{% endif %}>TLP:WHITE</option>
+          <option value="TLP:GREEN" {% if report and report.tlp == 'TLP:GREEN' %}selected{% endif %}>TLP:GREEN</option>
+          <option value="TLP:AMBER" {% if report and report.tlp == 'TLP:AMBER' %}selected{% endif %}>TLP:AMBER</option>
+          <option value="TLP:RED" {% if report and report.tlp == 'TLP:RED' %}selected{% endif %}>TLP:RED</option>
+        </select>
+      </div>
+
+      <div class="form-group">
+        <label for="summary">Summary</label>
+        <textarea name="summary" id="summary" rows="3">{{ report.summary if report else '' }}</textarea>
+      </div>
+
+      <div class="form-group">
+        <label for="body">Body</label>
+        <textarea name="body" id="body" rows="10">{{ report.body if report else '' }}</textarea>
+      </div>
+
+      <div class="form-actions">
+        <button type="submit" class="btn btn-primary">{{ 'Update' if report else 'Create' }}</button>
+        <a href="/reports" class="btn">Cancel</a>
+      </div>
+    </form>
+  </main>
+
+  <footer>
+    <p class="muted"><a href="/reports">← Back to Reports</a></p>
+  </footer>
+</body>
+</html>

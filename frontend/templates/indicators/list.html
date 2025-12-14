@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Indicators — TITAN</title>
+  <link rel="stylesheet" href="/static/styles.css">
+</head>
+<body>
+  <header>
+    <h1><a href="/">TITAN</a> / Indicators</h1>
+  </header>
+
+  <main>
+    <div class="toolbar">
+      <h2>Indicators ({{ indicators|length }})</h2>
+      <a href="/indicators/new/form" class="btn btn-primary">+ Add Indicator</a>
+    </div>
+
+    {% if indicators %}
+    <table class="data-table">
+      <thead>
+        <tr>
+          <th>Type</th>
+          <th>Value</th>
+          <th>Confidence</th>
+          <th>Active</th>
+          <th>Created</th>
+          <th>Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for indicator in indicators %}
+        <tr>
+          <td><span class="badge">{{ indicator.type }}</span></td>
+          <td><a href="/indicators/{{ indicator.id }}">{{ indicator.value[:50] }}</a></td>
+          <td>{{ indicator.confidence or '—' }}</td>
+          <td>{{ '✓' if indicator.active else '✗' }}</td>
+          <td>{{ indicator.created_at.strftime('%Y-%m-%d') }}</td>
+          <td class="actions">
+            <a href="/indicators/{{ indicator.id }}/edit" class="btn-small">Edit</a>
+            <form method="post" action="/indicators/{{ indicator.id }}/delete" style="display:inline">
+              <button type="submit" class="btn-small btn-danger" onclick="return confirm('Delete this indicator?')">Delete</button>
+            </form>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+    <p class="muted">No indicators yet. <a href="/indicators/new/form">Add one</a>.</p>
+    {% endif %}
+  </main>
+
+  <footer>
+    <p class="muted"><a href="/">← Home</a></p>
+  </footer>
+</body>
+</html>

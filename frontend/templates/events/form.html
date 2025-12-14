@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{{ 'Edit' if event else 'New' }} Event — TITAN</title>
+  <link rel="stylesheet" href="/static/styles.css">
+</head>
+<body>
+  <header>
+    <h1><a href="/">TITAN</a> / <a href="/events">Events</a> / {{ 'Edit' if event else 'New' }}</h1>
+  </header>
+
+  <main>
+    <form method="post" action="{{ action }}" class="form">
+      <div class="form-group">
+        <label for="title">Title *</label>
+        <input type="text" name="title" id="title" value="{{ event.title if event else '' }}" required>
+      </div>
+
+      <div class="form-group">
+        <label for="severity">Severity</label>
+        <select name="severity" id="severity">
+          <option value="">— Select —</option>
+          <option value="critical" {% if event and event.severity == 'critical' %}selected{% endif %}>Critical</option>
+          <option value="high" {% if event and event.severity == 'high' %}selected{% endif %}>High</option>
+          <option value="medium" {% if event and event.severity == 'medium' %}selected{% endif %}>Medium</option>
+          <option value="low" {% if event and event.severity == 'low' %}selected{% endif %}>Low</option>
+        </select>
+      </div>
+
+      <div class="form-group">
+        <label for="type">Type</label>
+        <select name="type" id="type">
+          <option value="">— Select —</option>
+          <option value="phishing" {% if event and event.type and event.type.value == 'phishing' %}selected{% endif %}>Phishing</option>
+          <option value="malware" {% if event and event.type and event.type.value == 'malware' %}selected{% endif %}>Malware</option>
+          <option value="breach" {% if event and event.type and event.type.value == 'breach' %}selected{% endif %}>Breach</option>
+          <option value="insider_threat" {% if event and event.type and event.type.value == 'insider_threat' %}selected{% endif %}>Insider Threat</option>
+          <option value="vulnerability" {% if event and event.type and event.type.value == 'vulnerability' %}selected{% endif %}>Vulnerability</option>
+          <option value="policy_violation" {% if event and event.type and event.type.value == 'policy_violation' %}selected{% endif %}>Policy Violation</option>
+          <option value="other" {% if event and event.type and event.type.value == 'other' %}selected{% endif %}>Other</option>
+        </select>
+      </div>
+
+      <div class="form-group">
+        <label for="status">Status *</label>
+        <select name="status" id="status" required>
+          <option value="open" {% if event and event.status.value == 'open' %}selected{% elif not event %}selected{% endif %}>Open</option>
+          <option value="in_progress" {% if event and event.status.value == 'in_progress' %}selected{% endif %}>In Progress</option>
+          <option value="resolved" {% if event and event.status.value == 'resolved' %}selected{% endif %}>Resolved</option>
+        </select>
+      </div>
+
+      <div class="form-group">
+        <label for="event_date">Event Date</label>
+        <input type="date" name="event_date" id="event_date" value="{{ event.event_date.strftime('%Y-%m-%d') if event and event.event_date else '' }}">
+      </div>
+
+      <div class="form-group">
+        <label for="closed_date">Closed Date</label>
+        <input type="date" name="closed_date" id="closed_date" value="{{ event.closed_date.strftime('%Y-%m-%d') if event and event.closed_date else '' }}">
+      </div>
+
+      <div class="form-group">
+        <label for="description">Description</label>
+        <textarea name="description" id="description" rows="5">{{ event.description if event else '' }}</textarea>
+      </div>
+
+      <div class="form-actions">
+        <button type="submit" class="btn btn-primary">{{ 'Update' if event else 'Create' }}</button>
+        <a href="/events" class="btn">Cancel</a>
+      </div>
+    </form>
+  </main>
+
+  <footer>
+    <p class="muted"><a href="/events">← Back to Events</a></p>
+  </footer>
+</body>
+</html>

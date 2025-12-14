@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>IOCs — TITAN</title>
+  <link rel="stylesheet" href="/static/styles.css">
+</head>
+<body>
+  <header>
+    <h1><a href="/">TITAN</a> / IOCs</h1>
+  </header>
+
+  <main>
+    <div class="toolbar">
+      <h2>Indicators of Compromise ({{ iocs|length }})</h2>
+      <a href="/iocs/new/form" class="btn btn-primary">+ Add IOC</a>
+    </div>
+
+    {% if iocs %}
+    <table class="data-table">
+      <thead>
+        <tr>
+          <th>Type</th>
+          <th>Value</th>
+          <th>Confidence</th>
+          <th>Linked To</th>
+          <th>Created</th>
+          <th>Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for ioc in iocs %}
+        <tr>
+          <td><span class="badge">{{ ioc.type }}</span></td>
+          <td>{{ ioc.value }}</td>
+          <td>{{ ioc.confidence or '—' }}</td>
+          <td>
+            {% if ioc.malware %}
+            Malware: <a href="/events/{{ ioc.malware.event_id }}">{{ ioc.malware.name }}</a>
+            {% elif ioc.phish %}
+            Phishing: <a href="/events/{{ ioc.phish.event_id }}">{{ ioc.phish.subject or 'Phish #' + ioc.phish.id|string }}</a>
+            {% else %}
+            —
+            {% endif %}
+          </td>
+          <td>{{ ioc.created_at.strftime('%Y-%m-%d') }}</td>
+          <td class="actions">
+            <form method="post" action="/ioc/{{ ioc.id }}/delete" style="display:inline">
+              <button type="submit" class="btn-small btn-danger" onclick="return confirm('Delete this IOC?')">Delete</button>
+            </form>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+    <p class="muted">No IOCs yet. <a href="/iocs/new/form">Add one</a>.</p>
+    {% endif %}
+  </main>
+
+  <footer>
+    <p class="muted"><a href="/">← Home</a></p>
+  </footer>
+</body>
+</html>

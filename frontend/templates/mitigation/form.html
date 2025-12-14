@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{{ 'Edit' if mitigation else 'Add' }} Mitigation — TITAN</title>
+  <link rel="stylesheet" href="/static/styles.css">
+</head>
+<body>
+  <header>
+    <h1><a href="/">TITAN</a> / <a href="/events/{{ event.id }}">Event #{{ event.id }}</a> / {{ 'Edit' if mitigation else 'Add' }} Mitigation</h1>
+  </header>
+
+  <main>
+    <form method="post" action="{{ action }}" class="form">
+      <div class="form-group">
+        <label for="title">Mitigation Title *</label>
+        <input type="text" name="title" id="title" value="{{ mitigation.title if mitigation else '' }}" required>
+      </div>
+
+      <div class="form-group">
+        <label for="assigned_to">Assigned To</label>
+        <input type="text" name="assigned_to" id="assigned_to" value="{{ mitigation.assigned_to if mitigation else '' }}">
+      </div>
+
+      <div class="form-group">
+        <label for="description">Description</label>
+        <textarea name="description" id="description" rows="4">{{ mitigation.description if mitigation else '' }}</textarea>
+      </div>
+
+      <div class="form-actions">
+        <button type="submit" class="btn btn-primary">{{ 'Update' if mitigation else 'Create' }}</button>
+        <a href="/events/{{ event.id }}" class="btn">Cancel</a>
+      </div>
+    </form>
+  </main>
+
+  <footer>
+    <p class="muted"><a href="/events/{{ event.id }}">← Back to Event</a></p>
+  </footer>
+</body>
+</html>

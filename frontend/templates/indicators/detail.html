@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Indicator #{{ indicator.id }} — TITAN</title>
+  <link rel="stylesheet" href="/static/styles.css">
+</head>
+<body>
+  <header>
+    <h1><a href="/">TITAN</a> / <a href="/indicators">Indicators</a> / #{{ indicator.id }}</h1>
+  </header>
+
+  <main>
+    <div class="toolbar">
+      <h2>{{ indicator.value }}</h2>
+      <div>
+        <a href="/indicators/{{ indicator.id }}/edit" class="btn">Edit</a>
+        <form method="post" action="/indicators/{{ indicator.id }}/delete" style="display:inline">
+          <button type="submit" class="btn btn-danger" onclick="return confirm('Delete this indicator?')">Delete</button>
+        </form>
+      </div>
+    </div>
+
+    <div class="detail-view">
+      <div class="detail-row">
+        <span class="label">Type:</span>
+        <span class="badge">{{ indicator.type }}</span>
+      </div>
+      <div class="detail-row">
+        <span class="label">Value:</span>
+        <span>{{ indicator.value }}</span>
+      </div>
+      <div class="detail-row">
+        <span class="label">Description:</span>
+        <span>{{ indicator.description or '—' }}</span>
+      </div>
+      <div class="detail-row">
+        <span class="label">Confidence:</span>
+        <span>{{ indicator.confidence or '—' }}</span>
+      </div>
+      <div class="detail-row">
+        <span class="label">Active:</span>
+        <span>{{ '✓ Yes' if indicator.active else '✗ No' }}</span>
+      </div>
+      <div class="detail-row">
+        <span class="label">First Seen:</span>
+        <span>{{ indicator.first_seen or '—' }}</span>
+      </div>
+      <div class="detail-row">
+        <span class="label">Last Seen:</span>
+        <span>{{ indicator.last_seen or '—' }}</span>
+      </div>
+      <div class="detail-row">
+        <span class="label">Created:</span>
+        <span>{{ indicator.created_at }}</span>
+      </div>
+    </div>
+  </main>
+
+  <footer>
+    <p class="muted"><a href="/indicators">← Back to Indicators</a></p>
+  </footer>
+</body>
+</html>

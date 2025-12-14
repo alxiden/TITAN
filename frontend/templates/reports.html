@@ -1,0 +1,238 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{{ title }}</title>
+  <link rel="stylesheet" href="/static/styles.css">
+</head>
+<body>
+  <header>
+    <div style="display: flex; justify-content: space-between; align-items: center;">
+      <div>
+        <h1>TITAN — Reports</h1>
+        <p class="muted">Database: {{ db_path }}</p>
+      </div>
+      <div style="display:flex; gap:0.5rem;">
+        <a href="/" class="btn">🏠 Home</a>
+        <a href="/settings" class="btn">⚙️ Settings</a>
+      </div>
+    </div>
+  </header>
+
+  <main>
+    <section class="charts-section">
+      <div class="toolbar" style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem;">
+        <h2>Detailed Analytics</h2>
+        <div style="display:flex; gap:0.5rem; align-items:center;">
+          <label class="muted" for="startDate">Start:</label>
+          <input type="date" id="startDate">
+          <label class="muted" for="endDate">End:</label>
+          <input type="date" id="endDate">
+          <button class="btn" id="applyRange">Apply</button>
+        </div>
+      </div>
+
+      <div class="charts-grid">
+        <div class="chart-container">
+          <h3>Events Closed Over Time</h3>
+          <canvas id="eventsClosedChart"></canvas>
+        </div>
+        <div class="chart-container">
+          <h3>Status by Type</h3>
+          <canvas id="statusByTypeChart"></canvas>
+        </div>
+        <div class="chart-container">
+          <h3>Severity Distribution</h3>
+          <canvas id="severityChart"></canvas>
+        </div>
+        <div class="chart-container">
+          <h3>Events by Type</h3>
+          <canvas id="eventsTypesChart"></canvas>
+        </div>
+        <div class="chart-container">
+          <h3>Events by Start Date</h3>
+          <canvas id="eventsStartChart"></canvas>
+        </div>
+        <div class="chart-container">
+          <h3>IOC Types Distribution</h3>
+          <canvas id="iocTypesChart"></canvas>
+        </div>
+      </div>
+    </section>
+
+    <section>
+      <h2>Recent Events</h2>
+      <table class="table">
+        <thead>
+          <tr>
+            <th>Date</th>
+            <th>Title</th>
+            <th>Type</th>
+            <th>Severity</th>
+            <th>Status</th>
+          </tr>
+        </thead>
+        <tbody id="recentEventsBody"></tbody>
+      </table>
+    </section>
+  </main>
+
+  <footer>
+    <p class="muted">© TITAN CTI Platform</p>
+  </footer>
+
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+  <script>
+    const charts = {};
+
+    function renderEventsClosed(suffix) {
+      fetch(`/api/charts/events-closed-timeline${suffix}`)
+        .then(res => res.json())
+        .then(data => {
+          if (charts.eventsClosed) charts.eventsClosed.destroy();
+          charts.eventsClosed = new Chart(document.getElementById('eventsClosedChart'), {
+            type: 'line',
+            data: {
+              labels: data.labels,
+              datasets: [{ label: 'Closed', data: data.data, borderColor: '#1e8e3e', backgroundColor: 'rgba(30,142,62,0.2)', tension: 0.3, fill: true }]
+            },
+            options: {
+              responsive: true,
+              plugins: { legend: { labels: { color: '#e6e6e6' } } },
+              scales: { x: { ticks: { color: '#9aa0a6' }, grid: { color: '#222431' } }, y: { ticks: { color: '#9aa0a6' }, grid: { color: '#222431' } } }
+            }
+          });
+        });
+    }
+
+    function renderStatusByType(suffix) {
+      fetch(`/api/charts/status-by-type${suffix}`)
+        .then(res => res.json())
+        .then(data => {
+          if (charts.statusByType) charts.statusByType.destroy();
+          charts.statusByType = new Chart(document.getElementById('statusByTypeChart'), {
+            type: 'bar',
+            data: {
+              labels: data.labels,
+              datasets: data.datasets.map((ds, idx) => ({
+                label: ds.label,
+                data: ds.data,
+                backgroundColor: ['#d93025','#f9ab00','#1e8e3e'][idx]
+              }))
+            },
+            options: {
+              responsive: true,
+              scales: { y: { beginAtZero: true, stacked: true }, x: { stacked: true } }
+            }
+          });
+        });
+    }
+
+    function renderSeverity(suffix) {
+      fetch(`/api/charts/event-severity-distribution${suffix}`)
+        .then(res => res.json())
+        .then(data => {
+          if (charts.severity) charts.severity.destroy();
+          charts.severity = new Chart(document.getElementById('severityChart'), {
+            type: 'doughnut',
+            data: {
+              labels: data.labels,
+              datasets: [{ data: data.data, backgroundColor: ['#8e24aa','#d93025','#f9ab00','#1e8e3e','#9ca3af'] }]
+            },
+            options: { responsive: true, plugins: { legend: { labels: { color: '#e6e6e6' } } } }
+          });
+        });
+    }
+
+    function renderEventsTypes(suffix) {
+      fetch(`/api/charts/events-types-30days${suffix}`)
+        .then(res => res.json())
+        .then(data => {
+          if (charts.eventsTypes) charts.eventsTypes.destroy();
+          charts.eventsTypes = new Chart(document.getElementById('eventsTypesChart'), {
+            type: 'bar',
+            data: { labels: data.labels, datasets: [{ label: 'Events', data: data.data, backgroundColor: ['#1a73e8','#d93025','#f9ab00','#1e8e3e','#8e24aa','#4da6ff','#9ca3af'] }] },
+            options: { responsive: true, scales: { y: { beginAtZero: true } } }
+          });
+        });
+    }
+
+    function renderEventsStart(suffix) {
+      fetch(`/api/charts/events-by-start-date${suffix}`)
+        .then(res => res.json())
+        .then(data => {
+          if (charts.eventsStart) charts.eventsStart.destroy();
+          charts.eventsStart = new Chart(document.getElementById('eventsStartChart'), {
+            type: 'line',
+            data: { labels: data.labels, datasets: [{ label: 'Events', data: data.data, borderColor: '#4da6ff', backgroundColor: 'rgba(77,166,255,0.2)', tension: 0.3, fill: true }] },
+            options: { responsive: true }
+          });
+        });
+    }
+
+    function renderIocTypes(suffix) {
+      fetch(`/api/charts/ioc-type-distribution${suffix}`)
+        .then(res => res.json())
+        .then(data => {
+          if (charts.iocTypes) charts.iocTypes.destroy();
+          charts.iocTypes = new Chart(document.getElementById('iocTypesChart'), {
+            type: 'doughnut',
+            data: { labels: data.labels, datasets: [{ data: data.data, backgroundColor: ['#1a73e8','#d93025','#f9ab00','#1e8e3e','#8e24aa','#4da6ff','#9ca3af'] }] },
+            options: { responsive: true, plugins: { legend: { labels: { color: '#e6e6e6' } } } }
+          });
+        });
+    }
+
+    function renderRecentEvents(suffix) {
+      fetch(`/api/reports/recent-events${suffix}`)
+        .then(res => res.json())
+        .then(data => {
+          const tbody = document.getElementById('recentEventsBody');
+          tbody.innerHTML = '';
+          data.items.forEach(item => {
+            const tr = document.createElement('tr');
+            tr.innerHTML = `<td>${item.date}</td><td>${item.title}</td><td><span class="badge">${item.type}</span></td><td>${item.severity}</td><td>${item.status}</td>`;
+            tbody.appendChild(tr);
+          });
+        });
+    }
+
+    const startInput = document.getElementById('startDate');
+    const endInput = document.getElementById('endDate');
+    const applyBtn = document.getElementById('applyRange');
+
+    function getParams() {
+      const start = startInput.value;
+      const end = endInput.value;
+      const qp = new URLSearchParams();
+      if (start) qp.append('start', start);
+      if (end) qp.append('end', end);
+      return qp.toString();
+    }
+
+    function loadAll() {
+      const params = getParams();
+      const suffix = params ? `?${params}` : '';
+      renderEventsClosed(suffix);
+      renderStatusByType(suffix);
+      renderSeverity(suffix);
+      renderEventsTypes(suffix);
+      renderEventsStart(suffix);
+      renderIocTypes(suffix);
+      renderRecentEvents(suffix);
+    }
+
+    applyBtn.addEventListener('click', loadAll);
+
+    // Initialize with last 30 days
+    const today = new Date();
+    const past = new Date();
+    past.setDate(today.getDate() - 30);
+    const fmt = d => d.toISOString().slice(0,10);
+    startInput.value = fmt(past);
+    endInput.value = fmt(today);
+    loadAll();
+  </script>
+</body>
+</html>

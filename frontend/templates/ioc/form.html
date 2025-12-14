@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Add IOC — TITAN</title>
+  <link rel="stylesheet" href="/static/styles.css">
+</head>
+<body>
+  <header>
+    <h1><a href="/">TITAN</a> / Add IOC</h1>
+  </header>
+
+  <main>
+    <form method="post" action="{{ action }}" class="form">
+      <div class="form-group">
+        <label for="type">IOC Type *</label>
+        <select name="type" id="type" required>
+          <option value="IP">IP Address</option>
+          <option value="Domain">Domain</option>
+          <option value="URL">URL</option>
+          <option value="Hash">Hash (MD5/SHA1/SHA256)</option>
+          <option value="Email">Email</option>
+          <option value="FilePath">File Path</option>
+        </select>
+      </div>
+
+      <div class="form-group">
+        <label for="value">Value *</label>
+        <input type="text" name="value" id="value" required>
+      </div>
+
+      <div class="form-group">
+        <label for="description">Description</label>
+        <textarea name="description" id="description" rows="3"></textarea>
+      </div>
+
+      <div class="form-group">
+        <label for="confidence">Confidence (0-100)</label>
+        <input type="number" name="confidence" id="confidence" min="0" max="100">
+      </div>
+
+      <div class="form-actions">
+        <button type="submit" class="btn btn-primary">Add IOC</button>
+        <a href="javascript:history.back()" class="btn">Cancel</a>
+      </div>
+    </form>
+  </main>
+
+  <footer>
+    <p class="muted"><a href="javascript:history.back()">← Back</a></p>
+  </footer>
+</body>
+</html>

@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Security Events — TITAN</title>
+  <link rel="stylesheet" href="/static/styles.css">
+</head>
+<body>
+  <header>
+    <h1><a href="/">TITAN</a> / Security Events</h1>
+  </header>
+
+  <main>
+    <div class="toolbar">
+      <h2>Security Events ({{ events|length }})</h2>
+      <a href="/events/new/form" class="btn btn-primary">+ New Event</a>
+    </div>
+
+    {% if events %}
+    <table class="data-table">
+      <thead>
+        <tr>
+          <th>Title</th>
+          <th>Type</th>
+          <th>Severity</th>
+          <th>Status</th>
+          <th>Event Date</th>
+          <th>Closed Date</th>
+          <th>Malware</th>
+          <th>Phishing</th>
+          <th>Mitigations</th>
+          <th>Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for event in events %}
+        <tr>
+          <td><a href="/events/{{ event.id }}">{{ event.title }}</a></td>
+          <td>{% if event.type %}<span class="badge">{{ event.type.value.replace('_', ' ').title() }}</span>{% else %}—{% endif %}</td>
+          <td>{% if event.severity %}<span class="badge badge-{{ event.severity }}">{{ event.severity }}</span>{% else %}—{% endif %}</td>
+          <td><span class="badge badge-{{ event.status.value }}">{{ event.status.value.replace('_', ' ').title() }}</span></td>
+          <td>{{ (event.event_date or event.detected_date).strftime('%Y-%m-%d') }}</td>
+          <td>{{ event.closed_date.strftime('%Y-%m-%d') if event.closed_date else '—' }}</td>
+          <td>{{ event.malware_instances|length }}</td>
+          <td>{{ event.phishing_instances|length }}</td>
+          <td>{{ event.mitigations|length }}</td>
+          <td class="actions">
+            <a href="/events/{{ event.id }}/edit" class="btn-small">Edit</a>
+            <form method="post" action="/events/{{ event.id }}/delete" style="display:inline">
+              <button type="submit" class="btn-small btn-danger" onclick="return confirm('Delete this event and all related data?')">Delete</button>
+            </form>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+    <p class="muted">No events yet. <a href="/events/new/form">Create one</a>.</p>
+    {% endif %}
+  </main>
+
+  <footer>
+    <p class="muted"><a href="/">← Home</a></p>
+  </footer>
+</body>
+</html>

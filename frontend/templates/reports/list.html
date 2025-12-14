@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Reports — TITAN</title>
+  <link rel="stylesheet" href="/static/styles.css">
+</head>
+<body>
+  <header>
+    <h1><a href="/">TITAN</a> / Reports</h1>
+  </header>
+
+  <main>
+    <div class="toolbar">
+      <h2>Reports ({{ reports|length }})</h2>
+      <a href="/reports/new/form" class="btn btn-primary">+ Add Report</a>
+    </div>
+
+    {% if reports %}
+    <table class="data-table">
+      <thead>
+        <tr>
+          <th>Title</th>
+          <th>TLP</th>
+          <th>Created</th>
+          <th>Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for report in reports %}
+        <tr>
+          <td><a href="/reports/{{ report.id }}">{{ report.title }}</a></td>
+          <td>{% if report.tlp %}<span class="badge">{{ report.tlp }}</span>{% else %}—{% endif %}</td>
+          <td>{{ report.created_at.strftime('%Y-%m-%d') }}</td>
+          <td class="actions">
+            <a href="/reports/{{ report.id }}/edit" class="btn-small">Edit</a>
+            <form method="post" action="/reports/{{ report.id }}/delete" style="display:inline">
+              <button type="submit" class="btn-small btn-danger" onclick="return confirm('Delete this report?')">Delete</button>
+            </form>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+    <p class="muted">No reports yet. <a href="/reports/new/form">Add one</a>.</p>
+    {% endif %}
+  </main>
+
+  <footer>
+    <p class="muted"><a href="/">← Home</a></p>
+  </footer>
+</body>
+</html>

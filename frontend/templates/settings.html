@@ -1,0 +1,203 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Settings — TITAN</title>
+  <link rel="stylesheet" href="/static/styles.css">
+  <style>
+    .settings-section {
+      background: #151821;
+      border: 1px solid #222431;
+      border-radius: 6px;
+      padding: 1.5rem;
+      margin-bottom: 1.5rem;
+    }
+    .settings-section h3 {
+      margin-top: 0;
+      margin-bottom: 1rem;
+      color: #e8e9ed;
+    }
+    .stat-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+      gap: 1rem;
+      margin-bottom: 1rem;
+    }
+    .stat-item {
+      background: #0f1115;
+      padding: 1rem;
+      border-radius: 4px;
+      border: 1px solid #222431;
+    }
+    .stat-label {
+      font-size: 0.875rem;
+      color: #9ca3af;
+      margin-bottom: 0.25rem;
+    }
+    .stat-value {
+      font-size: 1.5rem;
+      font-weight: 600;
+      color: #4da6ff;
+    }
+    .danger-zone {
+      border-color: #d93025;
+    }
+    .danger-zone h3 {
+      color: #d93025;
+    }
+    .settings-actions {
+      display: flex;
+      gap: 1rem;
+      flex-wrap: wrap;
+    }
+    .db-info {
+      background: #0f1115;
+      padding: 1rem;
+      border-radius: 4px;
+      border: 1px solid #222431;
+      font-family: monospace;
+      font-size: 0.875rem;
+    }
+    .db-info dt {
+      color: #9ca3af;
+      margin-bottom: 0.25rem;
+    }
+    .db-info dd {
+      color: #e8e9ed;
+      margin-bottom: 0.75rem;
+      margin-left: 0;
+    }
+    .success-message {
+      background: #1e8e3e;
+      color: white;
+      padding: 1rem;
+      border-radius: 4px;
+      margin-bottom: 1.5rem;
+      animation: fadeIn 0.3s ease-in;
+    }
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(-10px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <h1><a href="/">TITAN</a> / Settings</h1>
+  </header>
+
+  <main>
+    {% if request.query_params.get('cleared') == 'true' %}
+    <div class="success-message">
+      ✓ All data has been successfully cleared from the database.
+    </div>
+    {% endif %}
+
+    <!-- Database Statistics -->
+    <div class="settings-section">
+      <h3>📊 Database Statistics</h3>
+      <div class="stat-grid">
+        <div class="stat-item">
+          <div class="stat-label">Events</div>
+          <div class="stat-value">{{ stats.events }}</div>
+        </div>
+        <div class="stat-item">
+          <div class="stat-label">Malware</div>
+          <div class="stat-value">{{ stats.malware }}</div>
+        </div>
+        <div class="stat-item">
+          <div class="stat-label">Phishing</div>
+          <div class="stat-value">{{ stats.phishing }}</div>
+        </div>
+        <div class="stat-item">
+          <div class="stat-label">IOCs</div>
+          <div class="stat-value">{{ stats.iocs }}</div>
+        </div>
+        <div class="stat-item">
+          <div class="stat-label">Mitigations</div>
+          <div class="stat-value">{{ stats.mitigations }}</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Database Information -->
+    <div class="settings-section">
+      <h3>💾 Database Information</h3>
+      <dl class="db-info">
+        <dt>Path:</dt>
+        <dd>{{ db_info.path }}</dd>
+        <dt>Size:</dt>
+        <dd>{{ db_info.size }} MB</dd>
+        <dt>Status:</dt>
+        <dd>{{ '✓ Connected' if db_info.exists else '✗ Not Found' }}</dd>
+      </dl>
+    </div>
+
+    <!-- Data Management -->
+    <div class="settings-section">
+      <h3>🔧 Data Management</h3>
+      <p class="muted" style="margin-bottom: 1rem;">
+        Export your data for backup or analysis purposes.
+      </p>
+      <div class="settings-actions">
+        <a href="/settings/backup" class="btn btn-primary" download>
+          📦 Download Database Backup
+        </a>
+        <a href="/settings/export" class="btn" download>
+          📄 Export Data as JSON
+        </a>
+      </div>
+    </div>
+
+    <!-- Danger Zone -->
+    <div class="settings-section danger-zone">
+      <h3>⚠️ Danger Zone</h3>
+      <p class="muted" style="margin-bottom: 1rem;">
+        <strong>Warning:</strong> The following action is irreversible. All data will be permanently deleted from the database.
+      </p>
+      <form method="post" action="/settings/clear-data" onsubmit="return confirmClear();">
+        <button type="submit" class="btn btn-danger">
+          🗑️ Clear All Data
+        </button>
+      </form>
+    </div>
+
+    <!-- About -->
+    <div class="settings-section">
+      <h3>ℹ️ About TITAN</h3>
+      <p class="muted">
+        <strong>TITAN</strong> - Cyber Threat Intelligence Platform<br>
+        Version 1.0.0<br>
+        Designed for small businesses and individuals to track and manage security events.
+      </p>
+    </div>
+  </main>
+
+  <footer>
+    <p class="muted"><a href="/">← Back to Dashboard</a></p>
+  </footer>
+
+  <script>
+    function confirmClear() {
+      const confirmed = confirm(
+        '⚠️ WARNING: This will permanently delete ALL data from the database!\n\n' +
+        'This includes:\n' +
+        '• All Events\n' +
+        '• All Malware records\n' +
+        '• All Phishing records\n' +
+        '• All IOCs\n' +
+        '• All Mitigations\n\n' +
+        'This action CANNOT be undone.\n\n' +
+        'Are you absolutely sure you want to continue?'
+      );
+      
+      if (confirmed) {
+        return confirm('Final confirmation: Click OK to clear all data.');
+      }
+      
+      return false;
+    }
+  </script>
+</body>
+</html>

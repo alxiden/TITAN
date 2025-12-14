@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Phishing — TITAN</title>
+  <link rel="stylesheet" href="/static/styles.css">
+</head>
+<body>
+  <header>
+    <h1><a href="/">TITAN</a> / Phishing</h1>
+  </header>
+
+  <main>
+    <div class="toolbar">
+      <h2>Phishing ({{ phishing_list|length }})</h2>
+      <a href="/phishing/new/form" class="btn btn-primary">+ Add Phishing</a>
+    </div>
+
+    {% if phishing_list %}
+    <table class="data-table">
+      <thead>
+        <tr>
+          <th>Subject</th>
+          <th>Sender</th>
+          <th>Target</th>
+          <th>Event</th>
+          <th>IOCs</th>
+          <th>Occurrence Date</th>
+          <th>Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for phish in phishing_list %}
+        <tr>
+          <td>{{ phish.subject or '—' }}</td>
+          <td>{{ phish.sender or '—' }}</td>
+          <td>{{ phish.target or '—' }}</td>
+          <td>
+            {% if phish.event %}
+            <a href="/events/{{ phish.event.id }}">{{ phish.event.title }}</a>
+            {% else %}
+            —
+            {% endif %}
+          </td>
+          <td>{{ phish.iocs|length }}</td>
+          <td>{{ (phish.occurrence_date or phish.created_at).strftime('%Y-%m-%d') }}</td>
+          <td class="actions">
+            <a href="/phish/{{ phish.id }}/edit" class="btn-small">Edit</a>
+            <form method="post" action="/phish/{{ phish.id }}/delete" style="display:inline">
+              <button type="submit" class="btn-small btn-danger" onclick="return confirm('Delete this phishing?')">Delete</button>
+            </form>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+    <p class="muted">No phishing yet. <a href="/phishing/new/form">Add one</a>.</p>
+    {% endif %}
+  </main>
+
+  <footer>
+    <p class="muted"><a href="/">← Home</a></p>
+  </footer>
+</body>
+</html>

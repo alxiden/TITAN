@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{{ title }}</title>
+  <link rel="stylesheet" href="/static/styles.css">
+</head>
+<body>
+  <header>
+    <div style="display: flex; justify-content: space-between; align-items: center;">
+      <div>
+        <h1>TITAN — Cyber Threat Intelligence</h1>
+        <p class="muted">Database: {{ db_path }}</p>
+      </div>
+      <div style="display:flex; gap:0.5rem; margin-left:auto;">
+        <a href="/reports" class="btn">📊 Reports</a>
+        <a href="/settings" class="btn">⚙️ Settings</a>
+      </div>
+    </div>
+  </header>
+
+  <main>
+    <section class="cards">
+      <a href="/events" class="card card-link">
+        <h3>Events</h3>
+        <p class="count">{{ counts.events }}</p>
+      </a>
+      <a href="/malware" class="card card-link">
+        <h3>Malware</h3>
+        <p class="count">{{ counts.malware }}</p>
+      </a>
+      <a href="/phishing" class="card card-link">
+        <h3>Phishing</h3>
+        <p class="count">{{ counts.phishing }}</p>
+      </a>
+      <a href="/iocs" class="card card-link">
+        <h3>IOCs</h3>
+        <p class="count">{{ counts.iocs }}</p>
+      </a>
+      <a href="/mitigations" class="card card-link">
+        <h3>Mitigations</h3>
+        <p class="count">{{ counts.mitigations }}</p>
+      </a>
+      <a href="/events" class="card card-link">
+        <h3>Open Events</h3>
+        <p class="count">{{ counts.events_open }}</p>
+      </a>
+    </section>
+
+    <section class="charts-section">
+      <div class="toolbar" style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem;">
+        <h2>Analytics</h2>
+        <div>
+          <label class="muted" for="rangeSelect">Range:</label>
+          <select id="rangeSelect">
+            <option value="30" selected>30 days</option>
+            <option value="60">60 days</option>
+            <option value="90">90 days</option>
+          </select>
+        </div>
+      </div>
+      <div class="charts-grid">
+        <div class="chart-container">
+          <h3>Event Status</h3>
+          <canvas id="eventStatusChart"></canvas>
+        </div>
+        <div class="chart-container">
+          <h3>Events by Type</h3>
+          <canvas id="eventsTypesChart"></canvas>
+        </div>
+        <div class="chart-container">
+          <h3>Events by Start Date</h3>
+          <canvas id="threatsChart"></canvas>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer>
+    <p class="muted">© TITAN CTI Platform</p>
+  </footer>
+
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+  <script>
+    const charts = {};
+
+    function renderEventStatus(days) {
+      fetch(`/api/charts/event-status-summary?days=${days}`)
+        .then(res => res.json())
+        .then(data => {
+          if (charts.status) charts.status.destroy();
+          charts.status = new Chart(document.getElementById('eventStatusChart'), {
+            type: 'doughnut',
+            data: {
+              labels: data.labels,
+              datasets: [{
+                data: data.data,
+                backgroundColor: ['#d93025', '#f9ab00', '#1e8e3e']
+              }]
+            },
+            options: {
+              responsive: true,
+              maintainAspectRatio: true,
+              plugins: { legend: { labels: { color: '#e6e6e6' } } }
+            }
+          });
+        });
+    }
+
+    function renderEventsTypes(days) {
+      fetch(`/api/charts/events-types-30days?days=${days}`)
+        .then(res => res.json())
+        .then(data => {
+          if (charts.types) charts.types.destroy();
+          charts.types = new Chart(document.getElementById('eventsTypesChart'), {
+            type: 'bar',
+            data: {
+              labels: data.labels,
+              datasets: [{
+                label: 'Events',
+                data: data.data,
+                backgroundColor: ['#1a73e8','#d93025','#f9ab00','#1e8e3e','#8e24aa','#4da6ff','#9ca3af']
+              }]
+            },
+            options: {
+              responsive: true,
+              scales: { y: { beginAtZero: true } }
+            }
+          });
+        });
+    }
+
+    function renderThreatsTimeline(days) {
+      fetch(`/api/charts/events-by-start-date?days=${days}`)
+        .then(res => res.json())
+        .then(data => {
+          if (charts.threats) charts.threats.destroy();
+          charts.threats = new Chart(document.getElementById('threatsChart'), {
+            type: 'line',
+            data: {
+              labels: data.labels,
+              datasets: [{
+                label: 'Events',
+                data: data.data,
+                borderColor: '#4da6ff',
+                backgroundColor: 'rgba(77,166,255,0.2)',
+                tension: 0.3,
+                fill: true
+              }]
+            },
+            options: {
+              responsive: true,
+              maintainAspectRatio: true,
+              plugins: { legend: { labels: { color: '#e6e6e6' } } },
+              scales: {
+                x: { ticks: { color: '#9aa0a6' }, grid: { color: '#222431' } },
+                y: { ticks: { color: '#9aa0a6' }, grid: { color: '#222431' } }
+              }
+            }
+          });
+        });
+    }
+
+    const rangeSelect = document.getElementById('rangeSelect');
+    function loadAllCharts() {
+      const days = parseInt(rangeSelect.value, 10);
+      renderEventStatus(days);
+      renderEventsTypes(days);
+      renderThreatsTimeline(days);
+    }
+    rangeSelect.addEventListener('change', loadAllCharts);
+    loadAllCharts();
+  </script>
+</body>
+</html>

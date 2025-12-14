@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Report #{{ report.id }} — TITAN</title>
+  <link rel="stylesheet" href="/static/styles.css">
+</head>
+<body>
+  <header>
+    <h1><a href="/">TITAN</a> / <a href="/reports">Reports</a> / #{{ report.id }}</h1>
+  </header>
+
+  <main>
+    <div class="toolbar">
+      <h2>{{ report.title }}</h2>
+      <div>
+        <a href="/reports/{{ report.id }}/edit" class="btn">Edit</a>
+        <form method="post" action="/reports/{{ report.id }}/delete" style="display:inline">
+          <button type="submit" class="btn btn-danger" onclick="return confirm('Delete this report?')">Delete</button>
+        </form>
+      </div>
+    </div>
+
+    <div class="detail-view">
+      <div class="detail-row">
+        <span class="label">Title:</span>
+        <span>{{ report.title }}</span>
+      </div>
+      <div class="detail-row">
+        <span class="label">TLP:</span>
+        <span>{% if report.tlp %}<span class="badge">{{ report.tlp }}</span>{% else %}—{% endif %}</span>
+      </div>
+      <div class="detail-row">
+        <span class="label">Summary:</span>
+        <span>{{ report.summary or '—' }}</span>
+      </div>
+      <div class="detail-row">
+        <span class="label">Created:</span>
+        <span>{{ report.created_at }}</span>
+      </div>
+    </div>
+
+    {% if report.body %}
+    <div class="content-section">
+      <h3>Report Body</h3>
+      <div class="content-body">{{ report.body }}</div>
+    </div>
+    {% endif %}
+
+    {% if report.indicators %}
+    <div class="content-section">
+      <h3>Linked Indicators ({{ report.indicators|length }})</h3>
+      <ul class="links">
+        {% for indicator in report.indicators %}
+        <li><a href="/indicators/{{ indicator.id }}">{{ indicator.value }}</a></li>
+        {% endfor %}
+      </ul>
+    </div>
+    {% endif %}
+  </main>
+
+  <footer>
+    <p class="muted"><a href="/reports">← Back to Reports</a></p>
+  </footer>
+</body>
+</html>
