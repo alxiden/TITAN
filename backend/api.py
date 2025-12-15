@@ -1,10 +1,12 @@
-from fastapi import FastAPI, Request, Form
+from fastapi import FastAPI, Request, Form, UploadFile, File
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from pathlib import Path
+import io
+import csv
 from sqlalchemy import func
 from .db_init import get_session, DEFAULT_DB_PATH
-from .db_models import Event, Malware, Phish, IOC, Mitigation, EventStatus, EventType
+from .db_models import Event, Malware, MalwareFamily, Phish, IOC, Mitigation, EventStatus, EventType
 from jinja2 import Environment, FileSystemLoader, select_autoescape
 from datetime import datetime
 from typing import Optional
@@ -22,6 +24,102 @@ app = FastAPI(title="TITAN CTI Platform")
 # Mount static files
 app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 
+@app.get("/api/charts/malware-over-time")
+async def malware_over_time(days: int = 30, start: Optional[str] = None, end: Optional[str] = None):
+    """Malware counts per day within window or custom range"""
+    from datetime import timedelta
+    session = get_session(DEFAULT_DB_PATH)
+    now = datetime.utcnow()
+    window_start = now - timedelta(days=days)
+    window_end = now
+    if start:
+        try:
+            window_start = datetime.strptime(start, '%Y-%m-%d')
+        except ValueError:
+            pass
+    if end:
+        try:
+            window_end = datetime.strptime(end, '%Y-%m-%d') + timedelta(days=1)
+        except ValueError:
+            pass
+
+    items = session.query(Malware).all()
+    from collections import defaultdict
+    timeline = defaultdict(int)
+    for m in items:
+        dt = m.occurrence_date if m.occurrence_date else m.created_at
+        if window_start <= dt < window_end:
+            key = dt.strftime('%Y-%m-%d')
+            timeline[key] += 1
+    labels = sorted(timeline.keys())
+    data = [timeline[l] for l in labels]
+    return {"labels": labels, "data": data}
+
+
+@app.get("/api/charts/malware-by-family")
+async def malware_by_family(days: int = 30, start: Optional[str] = None, end: Optional[str] = None, top: int = 10):
+    """Top malware families within window"""
+    from datetime import timedelta
+    session = get_session(DEFAULT_DB_PATH)
+    now = datetime.utcnow()
+    window_start = now - timedelta(days=days)
+    window_end = now
+    if start:
+        try:
+            window_start = datetime.strptime(start, '%Y-%m-%d')
+        except ValueError:
+            pass
+    if end:
+        try:
+            window_end = datetime.strptime(end, '%Y-%m-%d') + timedelta(days=1)
+        except ValueError:
+            pass
+
+    items = session.query(Malware).all()
+    counts = {}
+    for m in items:
+        dt = m.occurrence_date if m.occurrence_date else m.created_at
+        if window_start <= dt < window_end:
+            name = (m.family_ref.name if m.family_ref else (m.family or '')).strip()
+            if name:
+                counts[name] = counts.get(name, 0) + 1
+    sorted_items = sorted(counts.items(), key=lambda x: x[1], reverse=True)[:top]
+    labels = [k for k,_ in sorted_items]
+    data = [v for _,v in sorted_items]
+    return {"labels": labels, "data": data}
+
+
+@app.get("/api/charts/malware-by-linkage")
+async def malware_by_linkage(days: int = 30, start: Optional[str] = None, end: Optional[str] = None):
+    """Counts of malware linked to events vs standalone within window"""
+    from datetime import timedelta
+    session = get_session(DEFAULT_DB_PATH)
+    now = datetime.utcnow()
+    window_start = now - timedelta(days=days)
+    window_end = now
+    if start:
+        try:
+            window_start = datetime.strptime(start, '%Y-%m-%d')
+        except ValueError:
+            pass
+    if end:
+        try:
+            window_end = datetime.strptime(end, '%Y-%m-%d') + timedelta(days=1)
+        except ValueError:
+            pass
+
+    items = session.query(Malware).all()
+    linked = 0
+    standalone = 0
+    for m in items:
+        dt = m.occurrence_date if m.occurrence_date else m.created_at
+        if window_start <= dt < window_end:
+            if m.event_id:
+                linked += 1
+            else:
+                standalone += 1
+    return {"labels": ["Linked to Events", "Standalone"], "data": [linked, standalone]}
+
 
 def db_counts(session):
     return {
@@ -32,6 +130,41 @@ def db_counts(session):
         "mitigations": session.query(func.count(Mitigation.id)).scalar() or 0,
         "events_open": session.query(func.count(Event.id)).filter(Event.status != EventStatus.RESOLVED).scalar() or 0,
     }
+
+
+def parse_date(value: Optional[str]):
+    if not value:
+        return None
+    value = value.strip()
+    if not value:
+        return None
+    fmts = ["%Y-%m-%d", "%Y-%m-%d %H:%M", "%Y-%m-%dT%H:%M:%S"]
+    for fmt in fmts:
+        try:
+            return datetime.strptime(value, fmt)
+        except ValueError:
+            continue
+    return None
+
+
+def get_or_create_family(session, name: Optional[str]) -> Optional[MalwareFamily]:
+    """Return an existing MalwareFamily (case-insensitive) or create it."""
+    if not name:
+        return None
+    normalized = name.strip()
+    if not normalized:
+        return None
+    existing = (
+        session.query(MalwareFamily)
+        .filter(MalwareFamily.name.ilike(normalized))
+        .first()
+    )
+    if existing:
+        return existing
+    fam = MalwareFamily(name=normalized)
+    session.add(fam)
+    session.flush()  # assign id without full commit
+    return fam
 
 
 @app.get("/", response_class=HTMLResponse)
@@ -125,45 +258,148 @@ async def events_closed_timeline(days: int = 30, start: Optional[str] = None, en
 
 
 @app.get("/api/charts/malware-phish-30days")
-async def malware_phish_30days(days: int = 30):
-    """Get malware and phishing counts for the last 30 days"""
+async def malware_phish_30days(days: int = 30, start: Optional[str] = None, end: Optional[str] = None):
+    """Get malware and phishing counts over time within a window or custom range"""
     from datetime import timedelta
     session = get_session(DEFAULT_DB_PATH)
-    thirty_days_ago = datetime.utcnow() - timedelta(days=days)
-    
-    # Fetch all malware and phishing (we'll filter based on occurrence date)
+    now = datetime.utcnow()
+    window_start = now - timedelta(days=days)
+    window_end = now
+    if start:
+        try:
+            window_start = datetime.strptime(start, '%Y-%m-%d')
+        except ValueError:
+            pass
+    if end:
+        try:
+            window_end = datetime.strptime(end, '%Y-%m-%d') + timedelta(days=1)
+        except ValueError:
+            pass
+
     malware_list = session.query(Malware).all()
     phish_list = session.query(Phish).all()
-    
-    # Group by date
+
     from collections import defaultdict
     timeline = defaultdict(lambda: {"malware": 0, "phishing": 0})
-    
+
     for malware in malware_list:
-        # Use occurrence_date if available, otherwise fall back to created_at
         date_to_use = malware.occurrence_date if malware.occurrence_date else malware.created_at
-        
-        # Only include items from the last 30 days
-        if date_to_use >= thirty_days_ago:
+        if window_start <= date_to_use < window_end:
             date_key = date_to_use.strftime('%Y-%m-%d')
             timeline[date_key]["malware"] += 1
-    
+
     for phish in phish_list:
-        # Use occurrence_date if available, otherwise fall back to created_at
         date_to_use = phish.occurrence_date if phish.occurrence_date else phish.created_at
-        
-        # Only include items from the last 30 days
-        if date_to_use >= thirty_days_ago:
+        if window_start <= date_to_use < window_end:
             date_key = date_to_use.strftime('%Y-%m-%d')
             timeline[date_key]["phishing"] += 1
-    
-    # Convert to sorted list
+
     sorted_dates = sorted(timeline.keys())
     return {
         "labels": sorted_dates,
         "malware": [timeline[d]["malware"] for d in sorted_dates],
         "phishing": [timeline[d]["phishing"] for d in sorted_dates]
     }
+
+
+@app.get("/api/charts/phish-over-time")
+async def phish_over_time(days: int = 30, start: Optional[str] = None, end: Optional[str] = None):
+    """Phishing counts per day within window or custom range"""
+    from datetime import timedelta
+    session = get_session(DEFAULT_DB_PATH)
+    now = datetime.utcnow()
+    window_start = now - timedelta(days=days)
+    window_end = now
+    if start:
+        try:
+            window_start = datetime.strptime(start, '%Y-%m-%d')
+        except ValueError:
+            pass
+    if end:
+        try:
+            window_end = datetime.strptime(end, '%Y-%m-%d') + timedelta(days=1)
+        except ValueError:
+            pass
+
+    items = session.query(Phish).all()
+    from collections import defaultdict
+    timeline = defaultdict(int)
+    for p in items:
+        dt = p.occurrence_date if p.occurrence_date else p.created_at
+        if window_start <= dt < window_end:
+            key = dt.strftime('%Y-%m-%d')
+            timeline[key] += 1
+    labels = sorted(timeline.keys())
+    data = [timeline[l] for l in labels]
+    return {"labels": labels, "data": data}
+
+
+@app.get("/api/charts/phish-by-sender-domain")
+async def phish_by_sender_domain(days: int = 30, start: Optional[str] = None, end: Optional[str] = None, top: int = 10):
+    """Top sender domains for phishing within window"""
+    from datetime import timedelta
+    session = get_session(DEFAULT_DB_PATH)
+    now = datetime.utcnow()
+    window_start = now - timedelta(days=days)
+    window_end = now
+    if start:
+        try:
+            window_start = datetime.strptime(start, '%Y-%m-%d')
+        except ValueError:
+            pass
+    if end:
+        try:
+            window_end = datetime.strptime(end, '%Y-%m-%d') + timedelta(days=1)
+        except ValueError:
+            pass
+
+    items = session.query(Phish).all()
+    counts = {}
+    for p in items:
+        dt = p.occurrence_date if p.occurrence_date else p.created_at
+        if window_start <= dt < window_end:
+            sender = (p.sender or '').strip()
+            dom = sender.split('@')[-1].lower() if '@' in sender else sender.lower()
+            if dom:
+                counts[dom] = counts.get(dom, 0) + 1
+    # Sort and take top
+    sorted_items = sorted(counts.items(), key=lambda x: x[1], reverse=True)[:top]
+    labels = [k for k,_ in sorted_items]
+    data = [v for _,v in sorted_items]
+    return {"labels": labels, "data": data}
+
+
+@app.get("/api/charts/phish-by-target")
+async def phish_by_target(days: int = 30, start: Optional[str] = None, end: Optional[str] = None, top: int = 10):
+    """Top targeted recipients for phishing within window"""
+    from datetime import timedelta
+    session = get_session(DEFAULT_DB_PATH)
+    now = datetime.utcnow()
+    window_start = now - timedelta(days=days)
+    window_end = now
+    if start:
+        try:
+            window_start = datetime.strptime(start, '%Y-%m-%d')
+        except ValueError:
+            pass
+    if end:
+        try:
+            window_end = datetime.strptime(end, '%Y-%m-%d') + timedelta(days=1)
+        except ValueError:
+            pass
+
+    items = session.query(Phish).all()
+    counts = {}
+    for p in items:
+        dt = p.occurrence_date if p.occurrence_date else p.created_at
+        if window_start <= dt < window_end:
+            tgt = (p.target or '').strip().lower()
+            if tgt:
+                counts[tgt] = counts.get(tgt, 0) + 1
+    sorted_items = sorted(counts.items(), key=lambda x: x[1], reverse=True)[:top]
+    labels = [k for k,_ in sorted_items]
+    data = [v for _,v in sorted_items]
+    return {"labels": labels, "data": data}
 
 
 @app.get("/api/charts/threats-30days")
@@ -456,7 +692,15 @@ async def event_status_summary(days: int = 30):
 @app.get("/events", response_class=HTMLResponse)
 async def list_events(request: Request):
     session = get_session(DEFAULT_DB_PATH)
-    events = session.query(Event).order_by(Event.created_at.desc()).all()
+    events = (
+        session.query(Event)
+        .order_by(
+            Event.event_date.is_(None),
+            Event.event_date.desc(),
+            Event.created_at.desc(),
+        )
+        .all()
+    )
     template = env.get_template("events/list.html")
     return template.render(request=request, events=events)
 
@@ -578,8 +822,15 @@ async def new_malware_form(request: Request, event_id: int):
     event = session.query(Event).filter(Event.id == event_id).first()
     if not event:
         return "Event not found", 404
+    families = session.query(MalwareFamily).order_by(MalwareFamily.name.asc()).all()
     template = env.get_template("malware/form.html")
-    return template.render(request=request, malware=None, event=event, action=f"/events/{event_id}/malware/new")
+    return template.render(
+        request=request,
+        malware=None,
+        event=event,
+        families=families,
+        action=f"/events/{event_id}/malware/new",
+    )
 
 
 @app.post("/events/{event_id}/malware/new")
@@ -597,9 +848,11 @@ async def create_malware(
             parsed_date = datetime.strptime(occurrence_date, '%Y-%m-%d')
         except ValueError:
             pass
+    family_ref = get_or_create_family(session, family)
     malware = Malware(
         name=name,
-        family=family,
+        family=family_ref.name if family_ref else None,
+        family_id=family_ref.id if family_ref else None,
         description=description,
         occurrence_date=parsed_date,
         event_id=event_id,
@@ -615,8 +868,15 @@ async def edit_malware_form(request: Request, id: int):
     malware = session.query(Malware).filter(Malware.id == id).first()
     if not malware:
         return "Not found", 404
+    families = session.query(MalwareFamily).order_by(MalwareFamily.name.asc()).all()
     template = env.get_template("malware/form.html")
-    return template.render(request=request, malware=malware, event=malware.event, action=f"/malware/{id}/edit")
+    return template.render(
+        request=request,
+        malware=malware,
+        event=malware.event,
+        families=families,
+        action=f"/malware/{id}/edit",
+    )
 
 
 @app.post("/malware/{id}/edit")
@@ -636,8 +896,10 @@ async def update_malware(
                 parsed_date = datetime.strptime(occurrence_date, '%Y-%m-%d')
             except ValueError:
                 pass
+        family_ref = get_or_create_family(session, family)
         malware.name = name
-        malware.family = family
+        malware.family = family_ref.name if family_ref else None
+        malware.family_id = family_ref.id if family_ref else None
         malware.description = description
         malware.occurrence_date = parsed_date
         session.commit()
@@ -910,7 +1172,15 @@ async def delete_mitigation(id: int):
 @app.get("/malware", response_class=HTMLResponse)
 async def list_all_malware(request: Request):
     session = get_session(DEFAULT_DB_PATH)
-    malware_list = session.query(Malware).order_by(Malware.created_at.desc()).all()
+    malware_list = (
+        session.query(Malware)
+        .order_by(
+            Malware.occurrence_date.is_(None),
+            Malware.occurrence_date.desc(),
+            Malware.created_at.desc(),
+        )
+        .all()
+    )
     template = env.get_template("malware/list.html")
     return template.render(request=request, malware_list=malware_list)
 
@@ -918,9 +1188,24 @@ async def list_all_malware(request: Request):
 @app.get("/malware/new/form", response_class=HTMLResponse)
 async def new_standalone_malware_form(request: Request):
     session = get_session(DEFAULT_DB_PATH)
-    events = session.query(Event).order_by(Event.created_at.desc()).all()
+    events = (
+        session.query(Event)
+        .order_by(
+            Event.event_date.is_(None),
+            Event.event_date.desc(),
+            Event.created_at.desc(),
+        )
+        .all()
+    )
+    families = session.query(MalwareFamily).order_by(MalwareFamily.name.asc()).all()
     template = env.get_template("malware/standalone_form.html")
-    return template.render(request=request, malware=None, events=events, action="/malware/new")
+    return template.render(
+        request=request,
+        malware=None,
+        events=events,
+        families=families,
+        action="/malware/new",
+    )
 
 
 @app.post("/malware/new")
@@ -938,9 +1223,11 @@ async def create_standalone_malware(
             parsed_date = datetime.strptime(occurrence_date, '%Y-%m-%d')
         except ValueError:
             pass
+    family_ref = get_or_create_family(session, family)
     malware = Malware(
         name=name,
-        family=family,
+        family=family_ref.name if family_ref else None,
+        family_id=family_ref.id if family_ref else None,
         description=description,
         occurrence_date=parsed_date,
         event_id=event_id if event_id else None,
@@ -953,7 +1240,15 @@ async def create_standalone_malware(
 @app.get("/phishing", response_class=HTMLResponse)
 async def list_all_phishing(request: Request):
     session = get_session(DEFAULT_DB_PATH)
-    phishing_list = session.query(Phish).order_by(Phish.created_at.desc()).all()
+    phishing_list = (
+        session.query(Phish)
+        .order_by(
+            Phish.occurrence_date.is_(None),
+            Phish.occurrence_date.desc(),
+            Phish.created_at.desc(),
+        )
+        .all()
+    )
     template = env.get_template("phish/list.html")
     return template.render(request=request, phishing_list=phishing_list)
 
@@ -961,7 +1256,15 @@ async def list_all_phishing(request: Request):
 @app.get("/phishing/new/form", response_class=HTMLResponse)
 async def new_standalone_phish_form(request: Request):
     session = get_session(DEFAULT_DB_PATH)
-    events = session.query(Event).order_by(Event.created_at.desc()).all()
+    events = (
+        session.query(Event)
+        .order_by(
+            Event.event_date.is_(None),
+            Event.event_date.desc(),
+            Event.created_at.desc(),
+        )
+        .all()
+    )
     template = env.get_template("phish/standalone_form.html")
     return template.render(request=request, phish=None, events=events, action="/phishing/new")
 
@@ -1046,7 +1349,15 @@ async def list_all_mitigations(request: Request):
 @app.get("/mitigations/new/form", response_class=HTMLResponse)
 async def new_standalone_mitigation_form(request: Request):
     session = get_session(DEFAULT_DB_PATH)
-    events = session.query(Event).order_by(Event.created_at.desc()).all()
+    events = (
+        session.query(Event)
+        .order_by(
+            Event.event_date.is_(None),
+            Event.event_date.desc(),
+            Event.created_at.desc(),
+        )
+        .all()
+    )
     template = env.get_template("mitigation/standalone_form.html")
     return template.render(request=request, mitigation=None, events=events, action="/mitigations/new")
 
@@ -1093,9 +1404,11 @@ async def settings_page(request: Request):
         "exists": db_path.exists(),
         "size": round(db_path.stat().st_size / 1024 / 1024, 2) if db_path.exists() else 0,  # MB
     }
+
+    families = session.query(MalwareFamily).order_by(MalwareFamily.name.asc()).all()
     
     template = env.get_template("settings.html")
-    return template.render(request=request, stats=stats, db_info=db_info)
+    return template.render(request=request, stats=stats, db_info=db_info, families=families)
 
 
 @app.post("/settings/clear-data")
@@ -1112,6 +1425,17 @@ async def clear_all_data():
     
     session.commit()
     return RedirectResponse(url="/settings?cleared=true", status_code=303)
+
+
+@app.post("/settings/malware-family")
+async def add_malware_family(name: str = Form(...)):
+    """Add a new malware family to the reference table."""
+    session = get_session(DEFAULT_DB_PATH)
+    fam = get_or_create_family(session, name)
+    session.commit()
+    return RedirectResponse(
+        url=f"/settings?family_added={fam.id if fam else ''}", status_code=303
+    )
 
 
 @app.get("/settings/backup")
@@ -1167,6 +1491,7 @@ async def export_data():
                 "id": m.id,
                 "name": m.name,
                 "family": m.family,
+                "family_id": m.family_id,
                 "description": m.description,
                 "occurrence_date": m.occurrence_date.isoformat() if m.occurrence_date else None,
                 "event_id": m.event_id,
@@ -1219,4 +1544,118 @@ async def export_data():
         headers={
             "Content-Disposition": f"attachment; filename=titan_export_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
         }
+    )
+
+
+@app.post("/settings/import/malware-csv")
+async def import_malware_csv(file: UploadFile = File(...)):
+    """Import malware records from a CSV file.
+
+    Expected columns (header names, case-insensitive):
+    - name (required)
+    - family (optional)
+    - description (optional)
+    - occurrence_date (YYYY-MM-DD, optional)
+    - event_id (optional, will link if exists)
+    """
+    session = get_session(DEFAULT_DB_PATH)
+    content = await file.read()
+    text = content.decode("utf-8", errors="ignore")
+    reader = csv.DictReader(io.StringIO(text))
+
+    imported = 0
+    failed = 0
+
+    for row in reader:
+        name = (row.get("name") or "").strip()
+        if not name:
+            failed += 1
+            continue
+
+        family = (row.get("family") or "").strip() or None
+        description = (row.get("description") or "").strip() or None
+        occ = parse_date(row.get("occurrence_date") or row.get("date"))
+
+        family_ref = get_or_create_family(session, family)
+
+        event_id = None
+        raw_eid = row.get("event_id") or row.get("event")
+        if raw_eid:
+            try:
+                event_id = int(raw_eid)
+            except ValueError:
+                event_id = None
+
+        malware = Malware(
+            name=name,
+            family=family_ref.name if family_ref else None,
+            family_id=family_ref.id if family_ref else None,
+            description=description,
+            occurrence_date=occ,
+            event_id=event_id,
+        )
+        session.add(malware)
+        imported += 1
+
+    session.commit()
+    return RedirectResponse(
+        url=f"/settings?malware_imported={imported}&malware_failed={failed}",
+        status_code=303,
+    )
+
+
+@app.post("/settings/import/phish-csv")
+async def import_phish_csv(file: UploadFile = File(...)):
+    """Import phishing records from a CSV file.
+
+    Expected columns (header names, case-insensitive):
+    - subject (required)
+    - sender (optional)
+    - target (optional)
+    - description (optional)
+    - occurrence_date (YYYY-MM-DD, optional)
+    - event_id (optional, will link if exists)
+    """
+    session = get_session(DEFAULT_DB_PATH)
+    content = await file.read()
+    text = content.decode("utf-8", errors="ignore")
+    reader = csv.DictReader(io.StringIO(text))
+
+    imported = 0
+    failed = 0
+
+    for row in reader:
+        subject = (row.get("subject") or "").strip()
+        if not subject:
+            failed += 1
+            continue
+
+        sender = (row.get("sender") or "").strip() or None
+        target = (row.get("target") or "").strip() or None
+        description = (row.get("description") or "").strip() or None
+        occ = parse_date(row.get("occurrence_date") or row.get("date"))
+
+        event_id = None
+        raw_eid = row.get("event_id") or row.get("event")
+        if raw_eid:
+            try:
+                event_id = int(raw_eid)
+            except ValueError:
+                event_id = None
+
+        phish = Phish(
+            subject=subject,
+            sender=sender,
+            target=target,
+            description=description,
+            occurrence_date=occ,
+            event_id=event_id,
+        )
+        session.add(phish)
+        imported += 1
+
+    session.commit()
+    return RedirectResponse(
+        url=f"/settings?phish_imported={imported}&phish_failed={failed}",
+        status_code=303,
     )

@@ -16,6 +16,10 @@
       <h2>Indicators of Compromise ({{ iocs|length }})</h2>
       <a href="/iocs/new/form" class="btn btn-primary">+ Add IOC</a>
     </div>
+    <div class="form-group" style="max-width:420px; margin:0 0 1rem 0;">
+      <label for="ioc-search" class="muted">Search IOCs</label>
+      <input type="text" id="ioc-search" placeholder="Type to filter by any column">
+    </div>
 
     {% if iocs %}
     <table class="data-table">
@@ -29,7 +33,7 @@
           <th>Actions</th>
         </tr>
       </thead>
-      <tbody>
+      <tbody id="ioc-tbody">
         {% for ioc in iocs %}
         <tr>
           <td><span class="badge">{{ ioc.type }}</span></td>
@@ -62,5 +66,19 @@
   <footer>
     <p class="muted"><a href="/">← Home</a></p>
   </footer>
+  <script>
+    (function(){
+      const input = document.getElementById('ioc-search');
+      const tbody = document.getElementById('ioc-tbody');
+      if(!input || !tbody) return;
+      input.addEventListener('input', function(){
+        const q = this.value.trim().toLowerCase();
+        for (const row of tbody.rows) {
+          const text = row.innerText.toLowerCase();
+          row.style.display = text.includes(q) ? '' : 'none';
+        }
+      });
+    })();
+  </script>
 </body>
 </html>

@@ -93,6 +93,22 @@
       ✓ All data has been successfully cleared from the database.
     </div>
     {% endif %}
+    {% if request.query_params.get('malware_imported') or request.query_params.get('phish_imported') %}
+    <div class="success-message">
+      {% if request.query_params.get('malware_imported') %}
+        ✓ Imported {{ request.query_params.get('malware_imported') }} malware rows ({{ request.query_params.get('malware_failed', '0') }} skipped).
+      {% endif %}
+      {% if request.query_params.get('phish_imported') %}<br>{% endif %}
+      {% if request.query_params.get('phish_imported') %}
+        ✓ Imported {{ request.query_params.get('phish_imported') }} phishing rows ({{ request.query_params.get('phish_failed', '0') }} skipped).
+      {% endif %}
+    </div>
+    {% endif %}
+    {% if request.query_params.get('family_added') is not none %}
+    <div class="success-message">
+      ✓ Malware family added.
+    </div>
+    {% endif %}
 
     <!-- Database Statistics -->
     <div class="settings-section">
@@ -148,6 +164,63 @@
           📄 Export Data as JSON
         </a>
       </div>
+    </div>
+
+    <!-- Imports -->
+    <div class="settings-section">
+      <h3>⬆️ CSV Import</h3>
+      <p class="muted" style="margin-bottom: 1rem;">Upload CSV files to bulk-import malware and phishing records. Accepted encoding: UTF-8. Date format: YYYY-MM-DD.</p>
+      <div class="stat-grid" style="grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));">
+        <div class="stat-item" style="border: 1px dashed #222431;">
+          <h4 style="margin-top:0; color:#e8e9ed;">Malware CSV</h4>
+          <form method="post" action="/settings/import/malware-csv" enctype="multipart/form-data">
+            <div class="form-group" style="margin-bottom:0.75rem;">
+              <input type="file" name="file" accept=".csv" required>
+            </div>
+            <button type="submit" class="btn btn-primary">Import Malware CSV</button>
+          </form>
+          <p class="muted" style="margin-top:0.75rem; font-size:0.9rem;">
+            Columns: <code>name</code> (req), <code>family</code>, <code>description</code>, <code>occurrence_date</code>, <code>event_id</code>
+          </p>
+        </div>
+        <div class="stat-item" style="border: 1px dashed #222431;">
+          <h4 style="margin-top:0; color:#e8e9ed;">Phishing CSV</h4>
+          <form method="post" action="/settings/import/phish-csv" enctype="multipart/form-data">
+            <div class="form-group" style="margin-bottom:0.75rem;">
+              <input type="file" name="file" accept=".csv" required>
+            </div>
+            <button type="submit" class="btn btn-primary">Import Phishing CSV</button>
+          </form>
+          <p class="muted" style="margin-top:0.75rem; font-size:0.9rem;">
+            Columns: <code>subject</code> (req), <code>sender</code>, <code>target</code>, <code>description</code>, <code>occurrence_date</code>, <code>event_id</code>
+          </p>
+        </div>
+      </div>
+    </div>
+
+    <!-- Malware Families -->
+    <div class="settings-section">
+      <h3>🧬 Malware Families</h3>
+      <p class="muted" style="margin-bottom: 1rem;">Manage the dropdown options for malware families. These are used across malware forms.</p>
+      <div class="stat-grid" style="grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));">
+        {% for fam in families %}
+        <div class="stat-item">
+          <div class="stat-label">Family</div>
+          <div class="stat-value" style="font-size:1.1rem;">{{ fam.name }}</div>
+          <div class="muted" style="font-size:0.8rem;">ID: {{ fam.id }}</div>
+        </div>
+        {% endfor %}
+        {% if families|length == 0 %}
+        <p class="muted" style="grid-column: 1 / -1;">No families yet. Add one below.</p>
+        {% endif %}
+      </div>
+      <form method="post" action="/settings/malware-family" class="form" style="margin-top:1rem;">
+        <div class="form-group">
+          <label for="family_name">Add a new family</label>
+          <input type="text" name="name" id="family_name" placeholder="e.g., Emotet" required>
+        </div>
+        <button type="submit" class="btn btn-primary">Add Family</button>
+      </form>
     </div>
 
     <!-- Danger Zone -->
