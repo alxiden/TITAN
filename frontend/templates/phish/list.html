@@ -37,7 +37,7 @@
       <tbody id="phish-tbody">
         {% for phish in phishing_list %}
         <tr>
-          <td>{{ phish.subject or '—' }}</td>
+          <td><a href="/phishing/{{ phish.id }}">{{ phish.subject or '(No Subject)' }}</a></td>
           <td>{{ phish.sender or '—' }}</td>
           <td>{{ phish.target or '—' }}</td>
           <td>

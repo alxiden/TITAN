@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Phishing: {{ phish.subject or 'Details' }} — TITAN</title>
+  <link rel="stylesheet" href="/static/styles.css">
+</head>
+<body>
+  <header>
+    <h1><a href="/">TITAN</a> / <a href="/phishing">Phishing</a> / {{ phish.subject or 'Details' }}</h1>
+  </header>
+
+  <main>
+    <div class="toolbar">
+      <h2>{{ phish.subject or 'Phishing Details' }}</h2>
+      <div>
+        <a href="/phish/{{ phish.id }}/edit" class="btn">Edit</a>
+        <form method="post" action="/phish/{{ phish.id }}/delete" style="display:inline">
+          <button type="submit" class="btn btn-danger" onclick="return confirm('Delete this phishing?')">Delete</button>
+        </form>
+      </div>
+    </div>
+
+    <div class="detail-view">
+      <div class="detail-row">
+        <span class="label">Subject:</span>
+        <span>{{ phish.subject or '—' }}</span>
+      </div>
+      <div class="detail-row">
+        <span class="label">Sender:</span>
+        <span>{{ phish.sender or '—' }}</span>
+      </div>
+      <div class="detail-row">
+        <span class="label">Target:</span>
+        <span>{{ phish.target or '—' }}</span>
+      </div>
+      <div class="detail-row">
+        <span class="label">Description:</span>
+        <span>{{ phish.description or '—' }}</span>
+      </div>
+      {% if phish.occurrence_date %}
+      <div class="detail-row">
+        <span class="label">Occurrence Date:</span>
+        <span>{{ phish.occurrence_date.strftime('%Y-%m-%d') }}</span>
+      </div>
+      {% endif %}
+      <div class="detail-row">
+        <span class="label">Created:</span>
+        <span>{{ phish.created_at.strftime('%Y-%m-%d %H:%M') }}</span>
+      </div>
+      <div class="detail-row">
+        <span class="label">Linked Event:</span>
+        <span>
+          {% if phish.event %}
+          <a href="/events/{{ phish.event.id }}">{{ phish.event.title }}</a>
+          {% else %}
+          —
+          {% endif %}
+        </span>
+      </div>
+    </div>
+
+    <!-- IOCs Section -->
+    <div class="content-section">
+      <div class="toolbar">
+        <h3>Indicators of Compromise ({{ phish.iocs|length }})</h3>
+        <a href="/phish/{{ phish.id }}/ioc/new/form" class="btn-small btn-primary">+ Add IOC</a>
+      </div>
+      {% if phish.iocs %}
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th>Type</th>
+            <th>Value</th>
+            <th>Description</th>
+            <th>Confidence</th>
+            <th>Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for ioc in phish.iocs %}
+          <tr>
+            <td><span class="badge">{{ ioc.type }}</span></td>
+            <td><code>{{ ioc.value }}</code></td>
+            <td>{{ ioc.description or '—' }}</td>
+            <td>{{ ioc.confidence if ioc.confidence else '—' }}</td>
+            <td class="actions">
+              <form method="post" action="/ioc/{{ ioc.id }}/delete" style="display:inline">
+                <button type="submit" class="btn-small btn-danger" onclick="return confirm('Delete this IOC?')">Delete</button>
+              </form>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      {% else %}
+      <p class="muted">No IOCs linked. <a href="/phish/{{ phish.id }}/ioc/new/form">Add one</a>.</p>
+      {% endif %}
+    </div>
+  </main>
+
+  <footer>
+    <p class="muted"><a href="/phishing">← Back to Phishing</a></p>
+  </footer>
+</body>
+</html>

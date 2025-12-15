@@ -1,4 +1,4 @@
-# TITAN (Threat Inteligence Tracking & Analysis Nexus) — Cyber Threat Intelligence Platform
+# TITAN (Threat Intelligence Tracking & Analysis Nexus) — Cyber Threat Intelligence Platform
 
 A comprehensive threat intelligence platform designed for small businesses and personal use. TITAN helps you track, analyze, and manage security incidents, malware, phishing attacks, indicators of compromise (IOCs), and mitigation strategies.
 

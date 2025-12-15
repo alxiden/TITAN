@@ -66,12 +66,12 @@
           <canvas id="eventStatusChart"></canvas>
         </div>
         <div class="chart-container">
-          <h3>Events by Type</h3>
-          <canvas id="eventsTypesChart"></canvas>
+          <h3>Phishing Over Time</h3>
+          <canvas id="phishOverTimeChart"></canvas>
         </div>
         <div class="chart-container">
-          <h3>Events by Start Date</h3>
-          <canvas id="threatsChart"></canvas>
+          <h3>Malware Breakdown</h3>
+          <canvas id="malwareBreakdownChart"></canvas>
         </div>
       </div>
     </section>
@@ -108,19 +108,45 @@
         });
     }
 
-    function renderEventsTypes(days) {
-      fetch(`/api/charts/events-types-30days?days=${days}`)
+    function renderPhishOverTime(days) {
+      fetch(`/api/charts/phish-over-time?days=${days}`)
         .then(res => res.json())
         .then(data => {
-          if (charts.types) charts.types.destroy();
-          charts.types = new Chart(document.getElementById('eventsTypesChart'), {
+          if (charts.phish) charts.phish.destroy();
+          charts.phish = new Chart(document.getElementById('phishOverTimeChart'), {
+            type: 'line',
+            data: {
+              labels: data.labels,
+              datasets: [{
+                label: 'Phishing Emails',
+                data: data.data,
+                borderColor: '#1a73e8',
+                backgroundColor: 'rgba(26,115,232,0.2)',
+                tension: 0.3,
+                fill: true
+              }]
+            },
+            options: {
+              responsive: true,
+              maintainAspectRatio: true
+            }
+          });
+        });
+    }
+
+    function renderMalwareBreakdown(days) {
+      fetch(`/api/charts/malware-by-family?days=${days}&top=10`)
+        .then(res => res.json())
+        .then(data => {
+          if (charts.malware) charts.malware.destroy();
+          charts.malware = new Chart(document.getElementById('malwareBreakdownChart'), {
             type: 'bar',
             data: {
               labels: data.labels,
               datasets: [{
-                label: 'Events',
+                label: 'Malware (by family)',
                 data: data.data,
-                backgroundColor: ['#1a73e8','#d93025','#f9ab00','#1e8e3e','#8e24aa','#4da6ff','#9ca3af']
+                backgroundColor: '#8e24aa'
               }]
             },
             options: {
@@ -131,43 +157,12 @@
         });
     }
 
-    function renderThreatsTimeline(days) {
-      fetch(`/api/charts/events-by-start-date?days=${days}`)
-        .then(res => res.json())
-        .then(data => {
-          if (charts.threats) charts.threats.destroy();
-          charts.threats = new Chart(document.getElementById('threatsChart'), {
-            type: 'line',
-            data: {
-              labels: data.labels,
-              datasets: [{
-                label: 'Events',
-                data: data.data,
-                borderColor: '#4da6ff',
-                backgroundColor: 'rgba(77,166,255,0.2)',
-                tension: 0.3,
-                fill: true
-              }]
-            },
-            options: {
-              responsive: true,
-              maintainAspectRatio: true,
-              plugins: { legend: { labels: { color: '#e6e6e6' } } },
-              scales: {
-                x: { ticks: { color: '#9aa0a6' }, grid: { color: '#222431' } },
-                y: { ticks: { color: '#9aa0a6' }, grid: { color: '#222431' } }
-              }
-            }
-          });
-        });
-    }
-
     const rangeSelect = document.getElementById('rangeSelect');
     function loadAllCharts() {
       const days = parseInt(rangeSelect.value, 10);
       renderEventStatus(days);
-      renderEventsTypes(days);
-      renderThreatsTimeline(days);
+      renderPhishOverTime(days);
+      renderMalwareBreakdown(days);
     }
     rangeSelect.addEventListener('change', loadAllCharts);
     loadAllCharts();

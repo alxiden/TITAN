@@ -993,8 +993,11 @@ async def update_phish(
         phish.description = description
         phish.occurrence_date = parsed_date
         session.commit()
-        return RedirectResponse(url=f"/events/{phish.event_id}", status_code=303)
-    return RedirectResponse(url="/events", status_code=303)
+        if phish.event_id:
+            return RedirectResponse(url=f"/events/{phish.event_id}", status_code=303)
+        else:
+            return RedirectResponse(url="/phishing", status_code=303)
+    return RedirectResponse(url="/phishing", status_code=303)
 
 
 @app.post("/phish/{id}/delete")
@@ -1040,8 +1043,11 @@ async def create_malware_ioc(
         )
         session.add(ioc)
         session.commit()
-        return RedirectResponse(url=f"/events/{malware.event_id}", status_code=303)
-    return RedirectResponse(url="/events", status_code=303)
+        if malware.event_id:
+            return RedirectResponse(url=f"/events/{malware.event_id}", status_code=303)
+        else:
+            return RedirectResponse(url=f"/malware/{malware_id}", status_code=303)
+    return RedirectResponse(url="/malware", status_code=303)
 
 
 @app.get("/phish/{phish_id}/ioc/new/form", response_class=HTMLResponse)
@@ -1074,8 +1080,11 @@ async def create_phish_ioc(
         )
         session.add(ioc)
         session.commit()
-        return RedirectResponse(url=f"/events/{phish.event_id}", status_code=303)
-    return RedirectResponse(url="/events", status_code=303)
+        if phish.event_id:
+            return RedirectResponse(url=f"/events/{phish.event_id}", status_code=303)
+        else:
+            return RedirectResponse(url=f"/phishing/{phish_id}", status_code=303)
+    return RedirectResponse(url="/phishing", status_code=303)
 
 
 @app.post("/ioc/{id}/delete")
@@ -1185,6 +1194,16 @@ async def list_all_malware(request: Request):
     return template.render(request=request, malware_list=malware_list)
 
 
+@app.get("/malware/{id}", response_class=HTMLResponse)
+async def view_malware(request: Request, id: int):
+    session = get_session(DEFAULT_DB_PATH)
+    malware = session.query(Malware).filter(Malware.id == id).first()
+    if not malware:
+        return "Not found", 404
+    template = env.get_template("malware/detail.html")
+    return template.render(request=request, malware=malware)
+
+
 @app.get("/malware/new/form", response_class=HTMLResponse)
 async def new_standalone_malware_form(request: Request):
     session = get_session(DEFAULT_DB_PATH)
@@ -1251,6 +1270,16 @@ async def list_all_phishing(request: Request):
     )
     template = env.get_template("phish/list.html")
     return template.render(request=request, phishing_list=phishing_list)
+
+
+@app.get("/phishing/{id}", response_class=HTMLResponse)
+async def view_phishing(request: Request, id: int):
+    session = get_session(DEFAULT_DB_PATH)
+    phish = session.query(Phish).filter(Phish.id == id).first()
+    if not phish:
+        return "Not found", 404
+    template = env.get_template("phish/detail.html")
+    return template.render(request=request, phish=phish)
 
 
 @app.get("/phishing/new/form", response_class=HTMLResponse)
