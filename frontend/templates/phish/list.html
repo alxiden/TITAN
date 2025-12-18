@@ -28,6 +28,7 @@
           <th>Subject</th>
           <th>Sender</th>
           <th>Target</th>
+          <th>Risk Level</th>
           <th>Event</th>
           <th>IOCs</th>
           <th>Occurrence Date</th>
@@ -40,6 +41,13 @@
           <td><a href="/phishing/{{ phish.id }}">{{ phish.subject or '(No Subject)' }}</a></td>
           <td>{{ phish.sender or '—' }}</td>
           <td>{{ phish.target or '—' }}</td>
+          <td>
+            {% if phish.risk_level %}
+            <span class="badge badge-{{ phish.risk_level }}">{{ phish.risk_level|upper }}</span>
+            {% else %}
+            —
+            {% endif %}
+          </td>
           <td>
             {% if phish.event %}
             <a href="/events/{{ phish.event.id }}">{{ phish.event.title }}</a>

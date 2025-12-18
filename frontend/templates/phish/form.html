@@ -33,6 +33,17 @@
         <input type="date" name="occurrence_date" id="occurrence_date" value="{{ phish.occurrence_date.strftime('%Y-%m-%d') if phish and phish.occurrence_date else '' }}">
       </div>
 
+        <div class="form-group">
+          <label for="risk_level">Risk Level</label>
+          <select name="risk_level" id="risk_level">
+            <option value="">— Select Risk Level —</option>
+            <option value="low" {% if phish and phish.risk_level == 'low' %}selected{% endif %}>Low</option>
+            <option value="medium" {% if phish and phish.risk_level == 'medium' %}selected{% endif %}>Medium</option>
+            <option value="high" {% if phish and phish.risk_level == 'high' %}selected{% endif %}>High</option>
+            <option value="critical" {% if phish and phish.risk_level == 'critical' %}selected{% endif %}>Critical</option>
+          </select>
+        </div>
+
       <div class="form-group">
         <label for="description">Description</label>
         <textarea name="description" id="description" rows="4">{{ phish.description if phish else '' }}</textarea>

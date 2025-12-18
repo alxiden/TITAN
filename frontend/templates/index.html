@@ -4,6 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>{{ title }}</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
   <link rel="stylesheet" href="/static/styles.css">
 </head>
 <body>
@@ -21,66 +22,148 @@
   </header>
 
   <main>
-    <section class="cards">
-      <a href="/events" class="card card-link">
-        <h3>Events</h3>
-        <p class="count">{{ counts.events }}</p>
-      </a>
-      <a href="/malware" class="card card-link">
-        <h3>Malware</h3>
-        <p class="count">{{ counts.malware }}</p>
-      </a>
-      <a href="/phishing" class="card card-link">
-        <h3>Phishing</h3>
-        <p class="count">{{ counts.phishing }}</p>
-      </a>
-      <a href="/iocs" class="card card-link">
-        <h3>IOCs</h3>
-        <p class="count">{{ counts.iocs }}</p>
-      </a>
-      <a href="/mitigations" class="card card-link">
-        <h3>Mitigations</h3>
-        <p class="count">{{ counts.mitigations }}</p>
-      </a>
-      <a href="/events" class="card card-link">
-        <h3>Open Events</h3>
-        <p class="count">{{ counts.events_open }}</p>
-      </a>
-    </section>
+    <div class="container-fluid">
+      <div class="row g-3">
+        <div class="col-12 col-xl-9">
+          <div class="row g-3 mb-3">
+            <div class="col-6 col-md-4 col-lg-2">
+              <a href="/events" class="card card-link">
+                <h3>Events</h3>
+                <p class="count">{{ counts.events }}</p>
+              </a>
+            </div>
+            <div class="col-6 col-md-4 col-lg-2">
+              <a href="/malware" class="card card-link">
+                <h3>Malware</h3>
+                <p class="count">{{ counts.malware }}</p>
+              </a>
+            </div>
+            <div class="col-6 col-md-4 col-lg-2">
+              <a href="/phishing" class="card card-link">
+                <h3>Phishing</h3>
+                <p class="count">{{ counts.phishing }}</p>
+              </a>
+            </div>
+            <div class="col-6 col-md-4 col-lg-2">
+              <a href="/iocs" class="card card-link">
+                <h3>IOCs</h3>
+                <p class="count">{{ counts.iocs }}</p>
+              </a>
+            </div>
+            <div class="col-6 col-md-4 col-lg-2">
+              <a href="/mitigations" class="card card-link">
+                <h3>Mitigations</h3>
+                <p class="count">{{ counts.mitigations }}</p>
+              </a>
+            </div>
+          </div>
 
-    <section class="charts-section">
-      <div class="toolbar" style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem;">
-        <h2>Analytics</h2>
-        <div>
-          <label class="muted" for="rangeSelect">Range:</label>
-          <select id="rangeSelect">
-            <option value="30" selected>30 days</option>
-            <option value="60">60 days</option>
-            <option value="90">90 days</option>
-          </select>
+          <section class="charts-section">
+            <div class="toolbar d-flex justify-content-between align-items-center mb-3">
+              <h2>Analytics</h2>
+              <div>
+                <label class="muted" for="rangeSelect">Range:</label>
+                <select id="rangeSelect" class="form-select form-select-sm d-inline-block w-auto">
+                  <option value="30" selected>30 days</option>
+                  <option value="60">60 days</option>
+                  <option value="90">90 days</option>
+                </select>
+              </div>
+            </div>
+            <div class="row g-3">
+              <div class="col-12 col-lg-4">
+                <div class="chart-container">
+                  <h3>Event Status</h3>
+                  <canvas id="eventStatusChart"></canvas>
+                </div>
+              </div>
+              <div class="col-12 col-lg-4">
+                <div class="chart-container">
+                  <h3>Phishing Over Time</h3>
+                  <canvas id="phishOverTimeChart"></canvas>
+                </div>
+              </div>
+              <div class="col-12 col-lg-4">
+                <div class="chart-container">
+                  <h3>Malware Breakdown</h3>
+                  <canvas id="malwareBreakdownChart"></canvas>
+                </div>
+              </div>
+            </div>
+          </section>
         </div>
+
+        <aside class="col-12 col-xl-3">
+          <div class="important-info">
+            <h2>Important Information</h2>
+            <div class="info-card">
+              <h3>Risk Score</h3>
+              <div class="d-flex justify-content-between align-items-center mb-2">
+                <div>
+                  <p class="alert-count mb-1">{{ risk_score.score }}</p>
+                  <p class="muted small mb-0">Weighted severity of active events</p>
+                </div>
+                <span class="badge badge-{{ risk_score.level_class }}">{{ risk_score.level }}</span>
+              </div>
+              <ul class="risk-list">
+                <li><strong>{{ risk_score.active_events }}</strong> active events</li>
+                <li><strong>{{ risk_score.open }}</strong> open · <strong>{{ risk_score.in_progress }}</strong> in progress</li>
+              </ul>
+            </div>
+            <div class="info-card">
+              <h3>Critical Events</h3>
+              {% if critical_events %}
+                <p class="alert-count">{{ critical_events|length }}</p>
+                <ul class="critical-events-list">
+                  {% for event in critical_events %}
+                  <li>
+                    <a href="/events/{{ event.id }}">{{ event.title }}</a>
+                    <span class="badge badge-{{ event.status.value }}">{{ event.status.value|replace('_', ' ')|title }}</span>
+                  </li>
+                  {% endfor %}
+                </ul>
+              {% else %}
+                <p class="alert-count">0</p>
+                <p class="muted">No critical events</p>
+              {% endif %}
+            </div>
+            <div class="info-card">
+              <h3>Recent Events</h3>
+              {% if recent_events %}
+                <ul class="recent-events-list">
+                  {% for event in recent_events %}
+                  <li>
+                    <a href="/events/{{ event.id }}">{{ event.title }}</a>
+                    <span class="event-meta">
+                      <span class="badge badge-{{ event.severity or 'medium' }}">{{ event.severity or 'N/A' }}</span>
+                      <small class="muted">{{ event.created_at.strftime('%d/%m/%y') }}</small>
+                    </span>
+                  </li>
+                  {% endfor %}
+                </ul>
+              {% else %}
+                <p class="muted">No recent events</p>
+              {% endif %}
+            </div>
+            <div class="info-card">
+              <h3>Quick Links</h3>
+              <ul class="links">
+                <li><a href="/events">View All Events</a></li>
+                <li><a href="/reports">Reports</a></li>
+                <li><a href="/settings">Settings</a></li>
+              </ul>
+            </div>
+          </div>
+        </aside>
       </div>
-      <div class="charts-grid">
-        <div class="chart-container">
-          <h3>Event Status</h3>
-          <canvas id="eventStatusChart"></canvas>
-        </div>
-        <div class="chart-container">
-          <h3>Phishing Over Time</h3>
-          <canvas id="phishOverTimeChart"></canvas>
-        </div>
-        <div class="chart-container">
-          <h3>Malware Breakdown</h3>
-          <canvas id="malwareBreakdownChart"></canvas>
-        </div>
-      </div>
-    </section>
+    </div>
   </main>
 
   <footer>
     <p class="muted">© TITAN CTI Platform</p>
   </footer>
 
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
   <script>
     const charts = {};
@@ -101,7 +184,7 @@
             },
             options: {
               responsive: true,
-              maintainAspectRatio: true,
+              maintainAspectRatio: false,
               plugins: { legend: { labels: { color: '#e6e6e6' } } }
             }
           });
@@ -128,7 +211,7 @@
             },
             options: {
               responsive: true,
-              maintainAspectRatio: true
+              maintainAspectRatio: false
             }
           });
         });
@@ -151,6 +234,7 @@
             },
             options: {
               responsive: true,
+              maintainAspectRatio: false,
               scales: { y: { beginAtZero: true } }
             }
           });
@@ -166,6 +250,17 @@
     }
     rangeSelect.addEventListener('change', loadAllCharts);
     loadAllCharts();
+
+    // Handle window resize to update charts responsively
+    let resizeTimeout;
+    window.addEventListener('resize', () => {
+      clearTimeout(resizeTimeout);
+      resizeTimeout = setTimeout(() => {
+        Object.values(charts).forEach(chart => {
+          if (chart) chart.resize();
+        });
+      }, 250);
+    });
   </script>
 </body>
 </html>

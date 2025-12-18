@@ -4,6 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>{{ title }}</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
   <link rel="stylesheet" href="/static/styles.css">
 </head>
 <body>
@@ -21,87 +22,111 @@
   </header>
 
   <main>
-    <section class="charts-section">
-      <div class="toolbar" style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem;">
-        <h2>Reports</h2>
-        <div style="display:flex; gap:0.5rem; align-items:center;">
-          <label class="muted" for="startDate">Start:</label>
-          <input type="date" id="startDate">
-          <label class="muted" for="endDate">End:</label>
-          <input type="date" id="endDate">
-          <button class="btn" id="applyRange">Apply</button>
+    <div class="container-fluid">
+      <section>
+        <div class="d-flex justify-content-between align-items-center mb-4">
+          <h2>Reports</h2>
+          <div class="d-flex gap-2 align-items-center">
+            <label class="muted" for="startDate">Start:</label>
+            <input type="date" id="startDate" class="form-control form-control-sm" style="width:auto;">
+            <label class="muted" for="endDate">End:</label>
+            <input type="date" id="endDate" class="form-control form-control-sm" style="width:auto;">
+            <button class="btn btn-sm" id="applyRange">Apply</button>
+          </div>
         </div>
-      </div>
-      <!-- Row 1: Phishing -->
-      <div class="charts-grid" style="margin-bottom: 2.5rem;">
-        <div class="chart-container">
-          <h3>Phishing Over Time</h3>
-          <canvas id="phishOverTimeChart"></canvas>
-        </div>
-        <div class="chart-container">
-          <h3>Top Sender Domains</h3>
-          <canvas id="phishSenderChart"></canvas>
-        </div>
-        <div class="chart-container">
-          <h3>Top Targets</h3>
-          <canvas id="phishTargetChart"></canvas>
-        </div>
-      </div>
 
-      <!-- Row 2: Malware -->
-      <div class="charts-grid" style="margin-bottom: 2.5rem;">
-        <div class="chart-container">
-          <h3>Malware Over Time</h3>
-          <canvas id="malwareOverTimeChart"></canvas>
+        <!-- Row 1: Phishing -->
+        <div class="row g-3 mb-4">
+          <div class="col-12 col-lg-4">
+            <div class="chart-container">
+              <h3>Phishing Over Time</h3>
+              <canvas id="phishOverTimeChart"></canvas>
+            </div>
+          </div>
+          <div class="col-12 col-lg-4">
+            <div class="chart-container">
+              <h3>Top Sender Domains</h3>
+              <canvas id="phishSenderChart"></canvas>
+            </div>
+          </div>
+          <div class="col-12 col-lg-4">
+            <div class="chart-container">
+              <h3>Top Targets</h3>
+              <canvas id="phishTargetChart"></canvas>
+            </div>
+          </div>
         </div>
-        <div class="chart-container">
-          <h3>Top Malware Families</h3>
-          <canvas id="malwareFamilyChart"></canvas>
-        </div>
-        <div class="chart-container">
-          <h3>Malware Linkage</h3>
-          <canvas id="malwareLinkageChart"></canvas>
-        </div>
-      </div>
 
-      <!-- Row 3: Events -->
-      <div class="charts-grid">
-        <div class="chart-container">
-          <h3>Events Closed Over Time</h3>
-          <canvas id="eventsClosedChart"></canvas>
+        <!-- Row 2: Malware -->
+        <div class="row g-3 mb-4">
+          <div class="col-12 col-lg-4">
+            <div class="chart-container">
+              <h3>Malware Over Time</h3>
+              <canvas id="malwareOverTimeChart"></canvas>
+            </div>
+          </div>
+          <div class="col-12 col-lg-4">
+            <div class="chart-container">
+              <h3>Top Malware Families</h3>
+              <canvas id="malwareFamilyChart"></canvas>
+            </div>
+          </div>
+          <div class="col-12 col-lg-4">
+            <div class="chart-container">
+              <h3>Active Malware</h3>
+              <canvas id="malwareLinkageChart"></canvas>
+            </div>
+          </div>
         </div>
-        <div class="chart-container">
-          <h3>Status by Type</h3>
-          <canvas id="statusByTypeChart"></canvas>
-        </div>
-        <div class="chart-container">
-          <h3>Severity Distribution</h3>
-          <canvas id="severityChart"></canvas>
-        </div>
-      </div>
-    </section>
 
-    <section>
-      <h2>Recent Events</h2>
-      <table class="table">
-        <thead>
-          <tr>
-            <th>Date</th>
-            <th>Title</th>
-            <th>Type</th>
-            <th>Severity</th>
-            <th>Status</th>
-          </tr>
-        </thead>
-        <tbody id="recentEventsBody"></tbody>
-      </table>
-    </section>
+        <!-- Row 3: Events -->
+        <div class="row g-3 mb-4">
+          <div class="col-12 col-lg-4">
+            <div class="chart-container">
+              <h3>Events Closed Over Time</h3>
+              <canvas id="eventsClosedChart"></canvas>
+            </div>
+          </div>
+          <div class="col-12 col-lg-4">
+            <div class="chart-container">
+              <h3>Status by Type</h3>
+              <canvas id="statusByTypeChart"></canvas>
+            </div>
+          </div>
+          <div class="col-12 col-lg-4">
+            <div class="chart-container">
+              <h3>Severity Distribution</h3>
+              <canvas id="severityChart"></canvas>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="mt-5">
+        <h2>Recent Events</h2>
+        <div class="table-responsive">
+          <table class="table table-dark table-striped data-table">
+            <thead>
+              <tr>
+                <th>Date</th>
+                <th>Title</th>
+                <th>Type</th>
+                <th>Severity</th>
+                <th>Status</th>
+              </tr>
+            </thead>
+            <tbody id="recentEventsBody"></tbody>
+          </table>
+        </div>
+      </section>
+    </div>
   </main>
 
   <footer>
     <p class="muted">© TITAN CTI Platform</p>
   </footer>
 
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
   <script>
     const charts = {};
@@ -119,6 +144,7 @@
             },
             options: {
               responsive: true,
+              maintainAspectRatio: false,
               plugins: { legend: { labels: { color: '#e6e6e6' } } },
               scales: { x: { ticks: { color: '#9aa0a6' }, grid: { color: '#222431' } }, y: { ticks: { color: '#9aa0a6' }, grid: { color: '#222431' } } }
             }
@@ -143,6 +169,7 @@
             },
             options: {
               responsive: true,
+              maintainAspectRatio: false,
               scales: { y: { beginAtZero: true, stacked: true }, x: { stacked: true } }
             }
           });
@@ -160,7 +187,7 @@
               labels: data.labels,
               datasets: [{ data: data.data, backgroundColor: ['#8e24aa','#d93025','#f9ab00','#1e8e3e','#9ca3af'] }]
             },
-            options: { responsive: true, plugins: { legend: { labels: { color: '#e6e6e6' } } } }
+            options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { labels: { color: '#e6e6e6' } } } }
           });
         });
     }
@@ -173,7 +200,7 @@
           charts.eventsTypes = new Chart(document.getElementById('eventsTypesChart'), {
             type: 'bar',
             data: { labels: data.labels, datasets: [{ label: 'Events', data: data.data, backgroundColor: ['#1a73e8','#d93025','#f9ab00','#1e8e3e','#8e24aa','#4da6ff','#9ca3af'] }] },
-            options: { responsive: true, scales: { y: { beginAtZero: true } } }
+            options: { responsive: true, maintainAspectRatio: false, scales: { y: { beginAtZero: true } } }
           });
         });
     }
@@ -186,7 +213,7 @@
           charts.eventsStart = new Chart(document.getElementById('eventsStartChart'), {
             type: 'line',
             data: { labels: data.labels, datasets: [{ label: 'Events', data: data.data, borderColor: '#4da6ff', backgroundColor: 'rgba(77,166,255,0.2)', tension: 0.3, fill: true }] },
-            options: { responsive: true }
+            options: { responsive: true, maintainAspectRatio: false }
           });
         });
     }
@@ -276,7 +303,7 @@
           charts.phishOverTime = new Chart(document.getElementById('phishOverTimeChart'), {
             type: 'line',
             data: { labels: data.labels, datasets: [{ label: 'Phishing', data: data.data, borderColor: '#d93025', backgroundColor: 'rgba(217,48,37,0.2)', tension: 0.3, fill: true }] },
-            options: { responsive: true }
+            options: { responsive: true, maintainAspectRatio: false }
           });
         });
     }
@@ -289,7 +316,7 @@
           charts.phishSender = new Chart(document.getElementById('phishSenderChart'), {
             type: 'bar',
             data: { labels: data.labels, datasets: [{ label: 'Count', data: data.data, backgroundColor: '#1a73e8' }] },
-            options: { responsive: true, scales: { y: { beginAtZero: true } } }
+            options: { responsive: true, maintainAspectRatio: false, scales: { y: { beginAtZero: true } } }
           });
         });
     }
@@ -302,7 +329,7 @@
           charts.phishTarget = new Chart(document.getElementById('phishTargetChart'), {
             type: 'bar',
             data: { labels: data.labels, datasets: [{ label: 'Count', data: data.data, backgroundColor: '#4da6ff' }] },
-            options: { responsive: true, scales: { y: { beginAtZero: true } } }
+            options: { responsive: true, maintainAspectRatio: false, scales: { y: { beginAtZero: true } } }
           });
         });
     }
@@ -315,7 +342,7 @@
           charts.malwareOverTime = new Chart(document.getElementById('malwareOverTimeChart'), {
             type: 'line',
             data: { labels: data.labels, datasets: [{ label: 'Malware', data: data.data, borderColor: '#1a73e8', backgroundColor: 'rgba(26,115,232,0.2)', tension: 0.3, fill: true }] },
-            options: { responsive: true }
+            options: { responsive: true, maintainAspectRatio: false }
           });
         });
     }
@@ -328,7 +355,7 @@
           charts.malwareFamily = new Chart(document.getElementById('malwareFamilyChart'), {
             type: 'bar',
             data: { labels: data.labels, datasets: [{ label: 'Count', data: data.data, backgroundColor: '#8e24aa' }] },
-            options: { responsive: true, scales: { y: { beginAtZero: true } } }
+            options: { responsive: true, maintainAspectRatio: false, scales: { y: { beginAtZero: true } } }
           });
         });
     }
@@ -340,8 +367,8 @@
           if (charts.malwareLinkage) charts.malwareLinkage.destroy();
           charts.malwareLinkage = new Chart(document.getElementById('malwareLinkageChart'), {
             type: 'doughnut',
-            data: { labels: data.labels, datasets: [{ data: data.data, backgroundColor: ['#1e8e3e','#9ca3af'] }] },
-            options: { responsive: true }
+            data: { labels: data.labels, datasets: [{ data: data.data, backgroundColor: ['#d93025','#4da6ff'] }] },
+            options: { responsive: true, maintainAspectRatio: false }
           });
         });
     }

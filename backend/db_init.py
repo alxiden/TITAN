@@ -61,6 +61,13 @@ def ensure_schema(engine):
             conn.execute(text("ALTER TABLE malware ADD COLUMN family_id INTEGER"))
             conn.commit()
 
+        # Check phishing table columns
+        p_cols = conn.execute(text("PRAGMA table_info(phishing)")).fetchall()
+        p_col_names = {c[1] for c in p_cols}
+        if "risk_level" not in p_col_names:
+            conn.execute(text("ALTER TABLE phishing ADD COLUMN risk_level VARCHAR(16)"))
+            conn.commit()
+
         # Seed default malware families if table exists and is empty
         fam_cols = conn.execute(text("PRAGMA table_info(malware_families)")).fetchall()
         if fam_cols:

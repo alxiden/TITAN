@@ -180,7 +180,8 @@
             <button type="submit" class="btn btn-primary">Import Malware CSV</button>
           </form>
           <p class="muted" style="margin-top:0.75rem; font-size:0.9rem;">
-            Columns: <code>name</code> (req), <code>family</code>, <code>description</code>, <code>occurrence_date</code>, <code>event_id</code>
+            Columns: <code>name</code> (req), <code>family</code>, <code>description</code>, <code>occurrence_date</code>, <code>event_id</code><br>
+            Example: <code>Emotet,Emotet,"Banking trojan",2025-12-10,12</code>
           </p>
         </div>
         <div class="stat-item" style="border: 1px dashed #222431;">
@@ -192,7 +193,8 @@
             <button type="submit" class="btn btn-primary">Import Phishing CSV</button>
           </form>
           <p class="muted" style="margin-top:0.75rem; font-size:0.9rem;">
-            Columns: <code>subject</code> (req), <code>sender</code>, <code>target</code>, <code>description</code>, <code>occurrence_date</code>, <code>event_id</code>
+            Columns: <code>subject</code> (req), <code>sender</code>, <code>target</code>, <code>description</code>, <code>risk_level</code>, <code>occurrence_date</code>, <code>event_id</code><br>
+            Example: <code>Invoice required,accounts@bad.com,finance@company.com,"Payment request",high,2025-12-10,12</code>
           </p>
         </div>
       </div>

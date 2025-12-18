@@ -36,6 +36,16 @@
         <span>{{ phish.target or '—' }}</span>
       </div>
       <div class="detail-row">
+        <span class="label">Risk Level:</span>
+        <span>
+          {% if phish.risk_level %}
+          <span class="badge badge-{{ phish.risk_level }}">{{ phish.risk_level|upper }}</span>
+          {% else %}
+          —
+          {% endif %}
+        </span>
+      </div>
+      <div class="detail-row">
         <span class="label">Description:</span>
         <span>{{ phish.description or '—' }}</span>
       </div>

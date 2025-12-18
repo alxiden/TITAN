@@ -70,6 +70,7 @@ class Phish(Base):
     sender = Column(String(256), nullable=True)
     target = Column(String(256), nullable=True)
     description = Column(Text, nullable=True)
+    risk_level = Column(String(16), nullable=True)  # low, medium, high, critical
     occurrence_date = Column(DateTime, nullable=True)
     event_id = Column(Integer, ForeignKey("events.id"), nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)

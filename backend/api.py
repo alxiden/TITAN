@@ -91,7 +91,7 @@ async def malware_by_family(days: int = 30, start: Optional[str] = None, end: Op
 
 @app.get("/api/charts/malware-by-linkage")
 async def malware_by_linkage(days: int = 30, start: Optional[str] = None, end: Optional[str] = None):
-    """Counts of malware linked to events vs standalone within window"""
+    """Counts of active malware (linked to open/in-progress events) vs other within window."""
     from datetime import timedelta
     session = get_session(DEFAULT_DB_PATH)
     now = datetime.utcnow()
@@ -109,16 +109,17 @@ async def malware_by_linkage(days: int = 30, start: Optional[str] = None, end: O
             pass
 
     items = session.query(Malware).all()
-    linked = 0
-    standalone = 0
+    active = 0
+    other = 0
     for m in items:
         dt = m.occurrence_date if m.occurrence_date else m.created_at
         if window_start <= dt < window_end:
-            if m.event_id:
-                linked += 1
+            ev = m.event
+            if ev and ev.status in (EventStatus.OPEN, EventStatus.IN_PROGRESS):
+                active += 1
             else:
-                standalone += 1
-    return {"labels": ["Linked to Events", "Standalone"], "data": [linked, standalone]}
+                other += 1
+    return {"labels": ["Active (linked to open/in progress)", "Inactive"], "data": [active, other]}
 
 
 def db_counts(session):
@@ -132,19 +133,92 @@ def db_counts(session):
     }
 
 
+def get_critical_events(session):
+    """Get critical events that are open or in progress"""
+    return session.query(Event).filter(
+        Event.severity == 'critical',
+        Event.status.in_([EventStatus.OPEN, EventStatus.IN_PROGRESS])
+    ).order_by(Event.detected_date.desc()).limit(5).all()
+
+
+def get_recent_events(session, limit=3):
+    """Get the most recently created events"""
+    return session.query(Event).order_by(Event.created_at.desc()).limit(limit).all()
+
+
+def get_risk_score(session):
+    """Calculate a simple risk score from active events (open or in progress)."""
+    weights = {"critical": 5, "high": 3, "medium": 2, "low": 1}
+    active_events = session.query(Event).filter(Event.status.in_([EventStatus.OPEN, EventStatus.IN_PROGRESS])).all()
+    score = 0
+    for ev in active_events:
+        sev = (ev.severity or "").strip().lower()
+        score += weights.get(sev, 0)
+
+    # Derive level from score
+    if score == 0:
+        level = "low"
+    elif score <= 6:
+        level = "low"
+    elif score <= 14:
+        level = "medium"
+    elif score <= 25:
+        level = "high"
+    else:
+        level = "critical"
+
+    open_count = sum(1 for ev in active_events if ev.status == EventStatus.OPEN)
+    in_progress_count = sum(1 for ev in active_events if ev.status == EventStatus.IN_PROGRESS)
+
+    return {
+        "score": score,
+        "level": level.title(),
+        "level_class": level,  # for badge class mapping
+        "active_events": len(active_events),
+        "open": open_count,
+        "in_progress": in_progress_count,
+    }
+
+
 def parse_date(value: Optional[str]):
     if not value:
         return None
     value = value.strip()
     if not value:
         return None
-    fmts = ["%Y-%m-%d", "%Y-%m-%d %H:%M", "%Y-%m-%dT%H:%M:%S"]
+    # Support both ISO and common UK formats
+    fmts = [
+        "%Y-%m-%d",
+        "%Y-%m-%d %H:%M",
+        "%Y-%m-%dT%H:%M:%S",
+        "%d/%m/%Y",
+        "%d/%m/%Y %H:%M",
+        "%d-%m-%Y",
+        "%d-%m-%Y %H:%M",
+    ]
     for fmt in fmts:
         try:
             return datetime.strptime(value, fmt)
         except ValueError:
             continue
     return None
+
+
+def normalize_row(row: dict) -> dict:
+    """Normalize CSV DictReader row keys (strip BOM/whitespace, lower-case).
+
+    Ensures headers like '\ufeffname' or ' Name ' map to 'name'.
+    """
+    if not row:
+        return {}
+    normalized = {}
+    for k, v in row.items():
+        if k is None:
+            # Skip rows that DictReader may produce with None keys
+            continue
+        nk = k.replace("\ufeff", "").strip().lower()
+        normalized[nk] = v
+    return normalized
 
 
 def get_or_create_family(session, name: Optional[str]) -> Optional[MalwareFamily]:
@@ -171,11 +245,17 @@ def get_or_create_family(session, name: Optional[str]) -> Optional[MalwareFamily
 async def homepage(request: Request):
     session = get_session(DEFAULT_DB_PATH)
     counts = db_counts(session)
+    critical_events = get_critical_events(session)
+    recent_events = get_recent_events(session)
+    risk_score = get_risk_score(session)
     template = env.get_template("index.html")
     return template.render(
         request=request,
         title="TITAN — Cyber Threat Intelligence",
         counts=counts,
+        critical_events=critical_events,
+        recent_events=recent_events,
+        risk_score=risk_score,
         db_path=str(DEFAULT_DB_PATH),
     )
 
@@ -976,6 +1056,7 @@ async def update_phish(
     sender: Optional[str] = Form(None),
     target: Optional[str] = Form(None),
     description: Optional[str] = Form(None),
+    risk_level: Optional[str] = Form(None),
     occurrence_date: Optional[str] = Form(None),
 ):
     session = get_session(DEFAULT_DB_PATH)
@@ -991,6 +1072,7 @@ async def update_phish(
         phish.sender = sender
         phish.target = target
         phish.description = description
+        phish.risk_level = risk_level
         phish.occurrence_date = parsed_date
         session.commit()
         if phish.event_id:
@@ -1304,6 +1386,7 @@ async def create_standalone_phish(
     sender: Optional[str] = Form(None),
     target: Optional[str] = Form(None),
     description: Optional[str] = Form(None),
+    risk_level: Optional[str] = Form(None),
     occurrence_date: Optional[str] = Form(None),
     event_id: Optional[int] = Form(None),
 ):
@@ -1319,6 +1402,7 @@ async def create_standalone_phish(
         sender=sender,
         target=target,
         description=description,
+        risk_level=risk_level,
         occurrence_date=parsed_date,
         event_id=event_id if event_id else None,
     )
@@ -1590,12 +1674,16 @@ async def import_malware_csv(file: UploadFile = File(...)):
     session = get_session(DEFAULT_DB_PATH)
     content = await file.read()
     text = content.decode("utf-8", errors="ignore")
+    # Remove BOM at file start if present
+    if text.startswith("\ufeff"):
+        text = text.lstrip("\ufeff")
     reader = csv.DictReader(io.StringIO(text))
 
     imported = 0
     failed = 0
 
     for row in reader:
+        row = normalize_row(row)
         name = (row.get("name") or "").strip()
         if not name:
             failed += 1
@@ -1642,18 +1730,22 @@ async def import_phish_csv(file: UploadFile = File(...)):
     - sender (optional)
     - target (optional)
     - description (optional)
+    - risk_level (optional: low|medium|high|critical)
     - occurrence_date (YYYY-MM-DD, optional)
     - event_id (optional, will link if exists)
     """
     session = get_session(DEFAULT_DB_PATH)
     content = await file.read()
     text = content.decode("utf-8", errors="ignore")
+    if text.startswith("\ufeff"):
+        text = text.lstrip("\ufeff")
     reader = csv.DictReader(io.StringIO(text))
 
     imported = 0
     failed = 0
 
     for row in reader:
+        row = normalize_row(row)
         subject = (row.get("subject") or "").strip()
         if not subject:
             failed += 1
@@ -1662,6 +1754,9 @@ async def import_phish_csv(file: UploadFile = File(...)):
         sender = (row.get("sender") or "").strip() or None
         target = (row.get("target") or "").strip() or None
         description = (row.get("description") or "").strip() or None
+        risk_level = (row.get("risk_level") or "").strip().lower() or None
+        if risk_level and risk_level not in {"low", "medium", "high", "critical"}:
+            risk_level = None
         occ = parse_date(row.get("occurrence_date") or row.get("date"))
 
         event_id = None
@@ -1677,6 +1772,7 @@ async def import_phish_csv(file: UploadFile = File(...)):
             sender=sender,
             target=target,
             description=description,
+            risk_level=risk_level,
             occurrence_date=occ,
             event_id=event_id,
         )
