@@ -67,6 +67,16 @@
         <textarea name="description" id="description" rows="5">{{ event.description if event else '' }}</textarea>
       </div>
 
+      <div class="form-group">
+        <label for="apt_ids">Link to APTs</label>
+        <select name="apt_ids" id="apt_ids" multiple size="5">
+          {% for apt in apts %}
+          <option value="{{ apt.id }}" {% if event and apt in event.apts %}selected{% endif %}>{{ apt.name }}</option>
+          {% endfor %}
+        </select>
+        <p class="muted" style="font-size:0.85rem; margin-top:0.25rem;">Hold Ctrl (Cmd on Mac) to select multiple APTs.</p>
+      </div>
+
       <div class="form-actions">
         <button type="submit" class="btn btn-primary">{{ 'Update' if event else 'Create' }}</button>
         <a href="/events" class="btn">Cancel</a>

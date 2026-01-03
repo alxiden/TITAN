@@ -6,7 +6,7 @@ import io
 import csv
 from sqlalchemy import func
 from .db_init import get_session, DEFAULT_DB_PATH
-from .db_models import Event, Malware, MalwareFamily, Phish, IOC, Mitigation, EventStatus, EventType
+from .db_models import Event, Malware, MalwareFamily, Phish, IOC, Mitigation, APT, EventStatus, EventType
 from jinja2 import Environment, FileSystemLoader, select_autoescape
 from datetime import datetime
 from typing import Optional
@@ -129,6 +129,7 @@ def db_counts(session):
         "phishing": session.query(func.count(Phish.id)).scalar() or 0,
         "iocs": session.query(func.count(IOC.id)).scalar() or 0,
         "mitigations": session.query(func.count(Mitigation.id)).scalar() or 0,
+        "apts": session.query(func.count(APT.id)).scalar() or 0,
         "events_open": session.query(func.count(Event.id)).filter(Event.status != EventStatus.RESOLVED).scalar() or 0,
     }
 
@@ -797,8 +798,12 @@ async def view_event(request: Request, id: int):
 
 @app.get("/events/new/form", response_class=HTMLResponse)
 async def new_event_form(request: Request):
+    session = get_session(DEFAULT_DB_PATH)
+    apts = session.query(APT).order_by(APT.name).all()
     template = env.get_template("events/form.html")
-    return template.render(request=request, event=None, action="/events/new")
+    result = template.render(request=request, event=None, action="/events/new", apts=apts)
+    session.close()
+    return result
 
 
 @app.post("/events/new")
@@ -810,6 +815,7 @@ async def create_event(
     status: str = Form("open"),
     event_date: Optional[str] = Form(None),
     closed_date: Optional[str] = Form(None),
+    apt_ids: list = Form(None),
 ):
     session = get_session(DEFAULT_DB_PATH)
     parsed_date = None
@@ -833,9 +839,24 @@ async def create_event(
         event_date=parsed_date,
         closed_date=parsed_closed,
     )
+    
+    # Link APTs if provided
+    if apt_ids:
+        if not isinstance(apt_ids, list):
+            apt_ids = [apt_ids]
+        for apt_id in apt_ids:
+            try:
+                apt = session.query(APT).filter(APT.id == int(apt_id)).first()
+                if apt and apt not in event.apts:
+                    event.apts.append(apt)
+            except (ValueError, TypeError):
+                pass
+    
     session.add(event)
     session.commit()
-    return RedirectResponse(url=f"/events/{event.id}", status_code=303)
+    event_id = event.id
+    session.close()
+    return RedirectResponse(url=f"/events/{event_id}", status_code=303)
 
 
 @app.get("/events/{id}/edit", response_class=HTMLResponse)
@@ -843,9 +864,13 @@ async def edit_event_form(request: Request, id: int):
     session = get_session(DEFAULT_DB_PATH)
     event = session.query(Event).filter(Event.id == id).first()
     if not event:
+        session.close()
         return "Not found", 404
+    apts = session.query(APT).order_by(APT.name).all()
     template = env.get_template("events/form.html")
-    return template.render(request=request, event=event, action=f"/events/{id}/edit")
+    result = template.render(request=request, event=event, action=f"/events/{id}/edit", apts=apts)
+    session.close()
+    return result
 
 
 @app.post("/events/{id}/edit")
@@ -858,6 +883,7 @@ async def update_event(
     status: str = Form(...),
     event_date: Optional[str] = Form(None),
     closed_date: Optional[str] = Form(None),
+    apt_ids: list = Form(None),
 ):
     session = get_session(DEFAULT_DB_PATH)
     event = session.query(Event).filter(Event.id == id).first()
@@ -881,7 +907,22 @@ async def update_event(
         event.status = EventStatus[status.upper()]
         event.event_date = parsed_date
         event.closed_date = parsed_closed
+        
+        # Update APT associations
+        event.apts.clear()
+        if apt_ids:
+            if not isinstance(apt_ids, list):
+                apt_ids = [apt_ids]
+            for apt_id in apt_ids:
+                try:
+                    apt = session.query(APT).filter(APT.id == int(apt_id)).first()
+                    if apt and apt not in event.apts:
+                        event.apts.append(apt)
+                except (ValueError, TypeError):
+                    pass
+        
         session.commit()
+    session.close()
     return RedirectResponse(url=f"/events/{id}", status_code=303)
 
 
@@ -901,16 +942,21 @@ async def new_malware_form(request: Request, event_id: int):
     session = get_session(DEFAULT_DB_PATH)
     event = session.query(Event).filter(Event.id == event_id).first()
     if not event:
+        session.close()
         return "Event not found", 404
     families = session.query(MalwareFamily).order_by(MalwareFamily.name.asc()).all()
+    apts = session.query(APT).order_by(APT.name).all()
     template = env.get_template("malware/form.html")
-    return template.render(
+    result = template.render(
         request=request,
         malware=None,
         event=event,
         families=families,
+        apts=apts,
         action=f"/events/{event_id}/malware/new",
     )
+    session.close()
+    return result
 
 
 @app.post("/events/{event_id}/malware/new")
@@ -920,6 +966,7 @@ async def create_malware(
     family: Optional[str] = Form(None),
     description: Optional[str] = Form(None),
     occurrence_date: Optional[str] = Form(None),
+    apt_ids: list = Form(None),
 ):
     session = get_session(DEFAULT_DB_PATH)
     parsed_date = None
@@ -937,8 +984,22 @@ async def create_malware(
         occurrence_date=parsed_date,
         event_id=event_id,
     )
+    
+    # Link APTs if provided
+    if apt_ids:
+        if not isinstance(apt_ids, list):
+            apt_ids = [apt_ids]
+        for apt_id in apt_ids:
+            try:
+                apt = session.query(APT).filter(APT.id == int(apt_id)).first()
+                if apt and apt not in malware.apts:
+                    malware.apts.append(apt)
+            except (ValueError, TypeError):
+                pass
+    
     session.add(malware)
     session.commit()
+    session.close()
     return RedirectResponse(url=f"/events/{event_id}", status_code=303)
 
 
@@ -947,16 +1008,21 @@ async def edit_malware_form(request: Request, id: int):
     session = get_session(DEFAULT_DB_PATH)
     malware = session.query(Malware).filter(Malware.id == id).first()
     if not malware:
+        session.close()
         return "Not found", 404
     families = session.query(MalwareFamily).order_by(MalwareFamily.name.asc()).all()
+    apts = session.query(APT).order_by(APT.name).all()
     template = env.get_template("malware/form.html")
-    return template.render(
+    result = template.render(
         request=request,
         malware=malware,
         event=malware.event,
         families=families,
+        apts=apts,
         action=f"/malware/{id}/edit",
     )
+    session.close()
+    return result
 
 
 @app.post("/malware/{id}/edit")
@@ -966,6 +1032,7 @@ async def update_malware(
     family: Optional[str] = Form(None),
     description: Optional[str] = Form(None),
     occurrence_date: Optional[str] = Form(None),
+    apt_ids: list = Form(None),
 ):
     session = get_session(DEFAULT_DB_PATH)
     malware = session.query(Malware).filter(Malware.id == id).first()
@@ -982,8 +1049,24 @@ async def update_malware(
         malware.family_id = family_ref.id if family_ref else None
         malware.description = description
         malware.occurrence_date = parsed_date
+        
+        # Update APT associations
+        malware.apts.clear()
+        if apt_ids:
+            if not isinstance(apt_ids, list):
+                apt_ids = [apt_ids]
+            for apt_id in apt_ids:
+                try:
+                    apt = session.query(APT).filter(APT.id == int(apt_id)).first()
+                    if apt and apt not in malware.apts:
+                        malware.apts.append(apt)
+                except (ValueError, TypeError):
+                    pass
+        
         session.commit()
+        session.close()
         return RedirectResponse(url=f"/events/{malware.event_id}", status_code=303)
+    session.close()
     return RedirectResponse(url="/events", status_code=303)
 
 
@@ -1005,9 +1088,13 @@ async def new_phish_form(request: Request, event_id: int):
     session = get_session(DEFAULT_DB_PATH)
     event = session.query(Event).filter(Event.id == event_id).first()
     if not event:
+        session.close()
         return "Event not found", 404
+    apts = session.query(APT).order_by(APT.name).all()
     template = env.get_template("phish/form.html")
-    return template.render(request=request, phish=None, event=event, action=f"/events/{event_id}/phish/new")
+    result = template.render(request=request, phish=None, event=event, apts=apts, action=f"/events/{event_id}/phish/new")
+    session.close()
+    return result
 
 
 @app.post("/events/{event_id}/phish/new")
@@ -1018,6 +1105,7 @@ async def create_phish(
     target: Optional[str] = Form(None),
     description: Optional[str] = Form(None),
     occurrence_date: Optional[str] = Form(None),
+    apt_ids: list = Form(None),
 ):
     session = get_session(DEFAULT_DB_PATH)
     parsed_date = None
@@ -1034,8 +1122,22 @@ async def create_phish(
         occurrence_date=parsed_date,
         event_id=event_id,
     )
+    
+    # Link APTs if provided
+    if apt_ids:
+        if not isinstance(apt_ids, list):
+            apt_ids = [apt_ids]
+        for apt_id in apt_ids:
+            try:
+                apt = session.query(APT).filter(APT.id == int(apt_id)).first()
+                if apt and apt not in phish.apts:
+                    phish.apts.append(apt)
+            except (ValueError, TypeError):
+                pass
+    
     session.add(phish)
     session.commit()
+    session.close()
     return RedirectResponse(url=f"/events/{event_id}", status_code=303)
 
 
@@ -1044,9 +1146,13 @@ async def edit_phish_form(request: Request, id: int):
     session = get_session(DEFAULT_DB_PATH)
     phish = session.query(Phish).filter(Phish.id == id).first()
     if not phish:
+        session.close()
         return "Not found", 404
+    apts = session.query(APT).order_by(APT.name).all()
     template = env.get_template("phish/form.html")
-    return template.render(request=request, phish=phish, event=phish.event, action=f"/phish/{id}/edit")
+    result = template.render(request=request, phish=phish, event=phish.event, apts=apts, action=f"/phish/{id}/edit")
+    session.close()
+    return result
 
 
 @app.post("/phish/{id}/edit")
@@ -1058,6 +1164,7 @@ async def update_phish(
     description: Optional[str] = Form(None),
     risk_level: Optional[str] = Form(None),
     occurrence_date: Optional[str] = Form(None),
+    apt_ids: list = Form(None),
 ):
     session = get_session(DEFAULT_DB_PATH)
     phish = session.query(Phish).filter(Phish.id == id).first()
@@ -1074,11 +1181,27 @@ async def update_phish(
         phish.description = description
         phish.risk_level = risk_level
         phish.occurrence_date = parsed_date
+        
+        # Update APT associations
+        phish.apts.clear()
+        if apt_ids:
+            if not isinstance(apt_ids, list):
+                apt_ids = [apt_ids]
+            for apt_id in apt_ids:
+                try:
+                    apt = session.query(APT).filter(APT.id == int(apt_id)).first()
+                    if apt and apt not in phish.apts:
+                        phish.apts.append(apt)
+                except (ValueError, TypeError):
+                    pass
+        
         session.commit()
+        session.close()
         if phish.event_id:
             return RedirectResponse(url=f"/events/{phish.event_id}", status_code=303)
         else:
             return RedirectResponse(url="/phishing", status_code=303)
+    session.close()
     return RedirectResponse(url="/phishing", status_code=303)
 
 
@@ -1195,9 +1318,13 @@ async def new_mitigation_form(request: Request, event_id: int):
     session = get_session(DEFAULT_DB_PATH)
     event = session.query(Event).filter(Event.id == event_id).first()
     if not event:
+        session.close()
         return "Event not found", 404
+    apts = session.query(APT).order_by(APT.name).all()
     template = env.get_template("mitigation/form.html")
-    return template.render(request=request, mitigation=None, event=event, action=f"/events/{event_id}/mitigation/new")
+    result = template.render(request=request, mitigation=None, event=event, apts=apts, action=f"/events/{event_id}/mitigation/new")
+    session.close()
+    return result
 
 
 @app.post("/events/{event_id}/mitigation/new")
@@ -1206,6 +1333,7 @@ async def create_mitigation(
     title: str = Form(...),
     description: Optional[str] = Form(None),
     assigned_to: Optional[str] = Form(None),
+    apt_ids: list = Form(None),
 ):
     session = get_session(DEFAULT_DB_PATH)
     mitigation = Mitigation(
@@ -1214,8 +1342,14 @@ async def create_mitigation(
         assigned_to=assigned_to,
         event_id=event_id,
     )
+    
+    # Note: For mitigations, APTs are linked through the parent event
+    # The apt_ids field here is mainly for reference; actual linking is to the event
+    # We could optionally add direct APT linking to Mitigation in the future
+    
     session.add(mitigation)
     session.commit()
+    session.close()
     return RedirectResponse(url=f"/events/{event_id}", status_code=303)
 
 
@@ -1224,9 +1358,13 @@ async def edit_mitigation_form(request: Request, id: int):
     session = get_session(DEFAULT_DB_PATH)
     mitigation = session.query(Mitigation).filter(Mitigation.id == id).first()
     if not mitigation:
+        session.close()
         return "Not found", 404
+    apts = session.query(APT).order_by(APT.name).all()
     template = env.get_template("mitigation/form.html")
-    return template.render(request=request, mitigation=mitigation, event=mitigation.event, action=f"/mitigation/{id}/edit")
+    result = template.render(request=request, mitigation=mitigation, event=mitigation.event, apts=apts, action=f"/mitigation/{id}/edit")
+    session.close()
+    return result
 
 
 @app.post("/mitigation/{id}/edit")
@@ -1235,6 +1373,7 @@ async def update_mitigation(
     title: str = Form(...),
     description: Optional[str] = Form(None),
     assigned_to: Optional[str] = Form(None),
+    apt_ids: list = Form(None),
 ):
     session = get_session(DEFAULT_DB_PATH)
     mitigation = session.query(Mitigation).filter(Mitigation.id == id).first()
@@ -1243,7 +1382,9 @@ async def update_mitigation(
         mitigation.description = description
         mitigation.assigned_to = assigned_to
         session.commit()
+        session.close()
         return RedirectResponse(url=f"/events/{mitigation.event_id}", status_code=303)
+    session.close()
     return RedirectResponse(url="/events", status_code=303)
 
 
@@ -1299,14 +1440,18 @@ async def new_standalone_malware_form(request: Request):
         .all()
     )
     families = session.query(MalwareFamily).order_by(MalwareFamily.name.asc()).all()
+    apts = session.query(APT).order_by(APT.name).all()
     template = env.get_template("malware/standalone_form.html")
-    return template.render(
+    result = template.render(
         request=request,
         malware=None,
         events=events,
         families=families,
+        apts=apts,
         action="/malware/new",
     )
+    session.close()
+    return result
 
 
 @app.post("/malware/new")
@@ -1316,6 +1461,7 @@ async def create_standalone_malware(
     description: Optional[str] = Form(None),
     occurrence_date: Optional[str] = Form(None),
     event_id: Optional[int] = Form(None),
+    apt_ids: list = Form(None),
 ):
     session = get_session(DEFAULT_DB_PATH)
     parsed_date = None
@@ -1333,8 +1479,22 @@ async def create_standalone_malware(
         occurrence_date=parsed_date,
         event_id=event_id if event_id else None,
     )
+    
+    # Link APTs if provided
+    if apt_ids:
+        if not isinstance(apt_ids, list):
+            apt_ids = [apt_ids]
+        for apt_id in apt_ids:
+            try:
+                apt = session.query(APT).filter(APT.id == int(apt_id)).first()
+                if apt and apt not in malware.apts:
+                    malware.apts.append(apt)
+            except (ValueError, TypeError):
+                pass
+    
     session.add(malware)
     session.commit()
+    session.close()
     return RedirectResponse(url="/malware", status_code=303)
 
 
@@ -1376,8 +1536,11 @@ async def new_standalone_phish_form(request: Request):
         )
         .all()
     )
+    apts = session.query(APT).order_by(APT.name).all()
     template = env.get_template("phish/standalone_form.html")
-    return template.render(request=request, phish=None, events=events, action="/phishing/new")
+    result = template.render(request=request, phish=None, events=events, apts=apts, action="/phishing/new")
+    session.close()
+    return result
 
 
 @app.post("/phishing/new")
@@ -1389,6 +1552,7 @@ async def create_standalone_phish(
     risk_level: Optional[str] = Form(None),
     occurrence_date: Optional[str] = Form(None),
     event_id: Optional[int] = Form(None),
+    apt_ids: list = Form(None),
 ):
     session = get_session(DEFAULT_DB_PATH)
     parsed_date = None
@@ -1406,8 +1570,22 @@ async def create_standalone_phish(
         occurrence_date=parsed_date,
         event_id=event_id if event_id else None,
     )
+    
+    # Link APTs if provided
+    if apt_ids:
+        if not isinstance(apt_ids, list):
+            apt_ids = [apt_ids]
+        for apt_id in apt_ids:
+            try:
+                apt = session.query(APT).filter(APT.id == int(apt_id)).first()
+                if apt and apt not in phish.apts:
+                    phish.apts.append(apt)
+            except (ValueError, TypeError):
+                pass
+    
     session.add(phish)
     session.commit()
+    session.close()
     return RedirectResponse(url="/phishing", status_code=303)
 
 
@@ -1784,3 +1962,373 @@ async def import_phish_csv(file: UploadFile = File(...)):
         url=f"/settings?phish_imported={imported}&phish_failed={failed}",
         status_code=303,
     )
+
+# ==================== APT ENDPOINTS ====================
+
+@app.get("/apts", response_class=HTMLResponse)
+async def list_apts():
+    """List all APTs"""
+    session = get_session(DEFAULT_DB_PATH)
+    apts = session.query(APT).order_by(APT.name).all()
+    template = env.get_template("apts/list.html")
+    result = template.render(apts=apts)
+    session.close()
+    return result
+
+
+@app.get("/apts/{id}", response_class=HTMLResponse)
+async def view_apt(id: int):
+    """View APT details"""
+    session = get_session(DEFAULT_DB_PATH)
+    apt = session.query(APT).filter(APT.id == id).first()
+    if not apt:
+        session.close()
+        return "APT not found", 404
+    template = env.get_template("apts/detail.html")
+    result = template.render(apt=apt)
+    session.close()
+    return result
+
+
+@app.get("/apts/new/form", response_class=HTMLResponse)
+async def new_apt_form():
+    """Show form to create new APT"""
+    template = env.get_template("apts/new.html")
+    return template.render()
+
+
+@app.post("/apts/new")
+async def create_apt(
+    name: str = Form(...),
+    aliases: str = Form(default=""),
+    description: str = Form(default=""),
+    country_origin: str = Form(default=""),
+    primary_targets: str = Form(default=""),
+    tactics: str = Form(default=""),
+    techniques: str = Form(default=""),
+    first_seen: str = Form(default=""),
+    last_seen: str = Form(default=""),
+):
+    """Create new APT"""
+    session = get_session(DEFAULT_DB_PATH)
+    
+    # Parse dates
+    first_seen_dt = None
+    last_seen_dt = None
+    if first_seen:
+        try:
+            first_seen_dt = datetime.strptime(first_seen, '%Y-%m-%d')
+        except ValueError:
+            pass
+    if last_seen:
+        try:
+            last_seen_dt = datetime.strptime(last_seen, '%Y-%m-%d')
+        except ValueError:
+            pass
+    
+    apt = APT(
+        name=name.strip(),
+        aliases=aliases.strip() or None,
+        description=description.strip() or None,
+        country_origin=country_origin.strip() or None,
+        primary_targets=primary_targets.strip() or None,
+        tactics=tactics.strip() or None,
+        techniques=techniques.strip() or None,
+        first_seen=first_seen_dt,
+        last_seen=last_seen_dt,
+    )
+    session.add(apt)
+    session.commit()
+    apt_id = apt.id
+    session.close()
+    
+    return RedirectResponse(url=f"/apts/{apt_id}", status_code=303)
+
+
+@app.get("/apts/{id}/edit", response_class=HTMLResponse)
+async def edit_apt_form(id: int):
+    """Show form to edit APT"""
+    session = get_session(DEFAULT_DB_PATH)
+    apt = session.query(APT).filter(APT.id == id).first()
+    if not apt:
+        session.close()
+        return "APT not found", 404
+    template = env.get_template("apts/edit.html")
+    result = template.render(apt=apt)
+    session.close()
+    return result
+
+
+@app.post("/apts/{id}/edit")
+async def edit_apt(
+    id: int,
+    name: str = Form(...),
+    aliases: str = Form(default=""),
+    description: str = Form(default=""),
+    country_origin: str = Form(default=""),
+    primary_targets: str = Form(default=""),
+    tactics: str = Form(default=""),
+    techniques: str = Form(default=""),
+    first_seen: str = Form(default=""),
+    last_seen: str = Form(default=""),
+):
+    """Update APT details"""
+    session = get_session(DEFAULT_DB_PATH)
+    apt = session.query(APT).filter(APT.id == id).first()
+    if not apt:
+        return "APT not found", 404
+    
+    # Parse dates
+    first_seen_dt = None
+    last_seen_dt = None
+    if first_seen:
+        try:
+            first_seen_dt = datetime.strptime(first_seen, '%Y-%m-%d')
+        except ValueError:
+            pass
+    if last_seen:
+        try:
+            last_seen_dt = datetime.strptime(last_seen, '%Y-%m-%d')
+        except ValueError:
+            pass
+    
+    apt.name = name.strip()
+    apt.aliases = aliases.strip() or None
+    apt.description = description.strip() or None
+    apt.country_origin = country_origin.strip() or None
+    apt.primary_targets = primary_targets.strip() or None
+    apt.tactics = tactics.strip() or None
+    apt.techniques = techniques.strip() or None
+    apt.first_seen = first_seen_dt
+    apt.last_seen = last_seen_dt
+    
+    session.commit()
+    session.close()
+    
+    return RedirectResponse(url=f"/apts/{id}", status_code=303)
+
+
+@app.post("/apts/{id}/delete")
+async def delete_apt(id: int):
+    """Delete APT"""
+    session = get_session(DEFAULT_DB_PATH)
+    apt = session.query(APT).filter(APT.id == id).first()
+    if apt:
+        session.delete(apt)
+        session.commit()
+    session.close()
+    return RedirectResponse(url="/apts", status_code=303)
+
+
+# ==================== APT LINKING ENDPOINTS ====================
+
+@app.post("/apts/{apt_id}/link/event/{event_id}")
+async def link_apt_to_event(apt_id: int, event_id: int):
+    """Link APT to an event"""
+    session = get_session(DEFAULT_DB_PATH)
+    apt = session.query(APT).filter(APT.id == apt_id).first()
+    event = session.query(Event).filter(Event.id == event_id).first()
+    
+    if apt and event and event not in apt.events:
+        apt.events.append(event)
+        session.commit()
+    
+    session.close()
+    return RedirectResponse(url=f"/events/{event_id}", status_code=303)
+
+
+@app.post("/apts/{apt_id}/unlink/event/{event_id}")
+async def unlink_apt_from_event(apt_id: int, event_id: int):
+    """Unlink APT from an event"""
+    session = get_session(DEFAULT_DB_PATH)
+    apt = session.query(APT).filter(APT.id == apt_id).first()
+    event = session.query(Event).filter(Event.id == event_id).first()
+    
+    if apt and event and event in apt.events:
+        apt.events.remove(event)
+        session.commit()
+    
+    session.close()
+    return RedirectResponse(url=f"/events/{event_id}", status_code=303)
+
+
+@app.post("/apts/{apt_id}/link/malware/{malware_id}")
+async def link_apt_to_malware(apt_id: int, malware_id: int):
+    """Link APT to malware"""
+    session = get_session(DEFAULT_DB_PATH)
+    apt = session.query(APT).filter(APT.id == apt_id).first()
+    malware = session.query(Malware).filter(Malware.id == malware_id).first()
+    
+    if apt and malware and malware not in apt.malware:
+        apt.malware.append(malware)
+        session.commit()
+    
+    session.close()
+    return RedirectResponse(url=f"/malware/{malware_id}", status_code=303)
+
+
+@app.post("/apts/{apt_id}/unlink/malware/{malware_id}")
+async def unlink_apt_from_malware(apt_id: int, malware_id: int):
+    """Unlink APT from malware"""
+    session = get_session(DEFAULT_DB_PATH)
+    apt = session.query(APT).filter(APT.id == apt_id).first()
+    malware = session.query(Malware).filter(Malware.id == malware_id).first()
+    
+    if apt and malware and malware in apt.malware:
+        apt.malware.remove(malware)
+        session.commit()
+    
+    session.close()
+    return RedirectResponse(url=f"/malware/{malware_id}", status_code=303)
+
+
+@app.post("/apts/{apt_id}/link/phish/{phish_id}")
+async def link_apt_to_phish(apt_id: int, phish_id: int):
+    """Link APT to phishing"""
+    session = get_session(DEFAULT_DB_PATH)
+    apt = session.query(APT).filter(APT.id == apt_id).first()
+    phish = session.query(Phish).filter(Phish.id == phish_id).first()
+    
+    if apt and phish and phish not in apt.phishing:
+        apt.phishing.append(phish)
+        session.commit()
+    
+    session.close()
+    return RedirectResponse(url=f"/phish/{phish_id}", status_code=303)
+
+
+@app.post("/apts/{apt_id}/unlink/phish/{phish_id}")
+async def unlink_apt_from_phish(apt_id: int, phish_id: int):
+    """Unlink APT from phishing"""
+    session = get_session(DEFAULT_DB_PATH)
+    apt = session.query(APT).filter(APT.id == apt_id).first()
+    phish = session.query(Phish).filter(Phish.id == phish_id).first()
+    
+    if apt and phish and phish in apt.phishing:
+        apt.phishing.remove(phish)
+        session.commit()
+    
+    session.close()
+    return RedirectResponse(url=f"/phish/{phish_id}", status_code=303)
+
+
+@app.post("/apts/{apt_id}/link/ioc/{ioc_id}")
+async def link_apt_to_ioc(apt_id: int, ioc_id: int):
+    """Link APT to IOC"""
+    session = get_session(DEFAULT_DB_PATH)
+    apt = session.query(APT).filter(APT.id == apt_id).first()
+    ioc = session.query(IOC).filter(IOC.id == ioc_id).first()
+    
+    if apt and ioc and ioc not in apt.iocs:
+        apt.iocs.append(ioc)
+        session.commit()
+    
+    session.close()
+    return {"status": "success"}
+
+
+@app.post("/apts/{apt_id}/unlink/ioc/{ioc_id}")
+async def unlink_apt_from_ioc(apt_id: int, ioc_id: int):
+    """Unlink APT from IOC"""
+    session = get_session(DEFAULT_DB_PATH)
+    apt = session.query(APT).filter(APT.id == apt_id).first()
+    ioc = session.query(IOC).filter(IOC.id == ioc_id).first()
+    
+    if apt and ioc and ioc in apt.iocs:
+        apt.iocs.remove(ioc)
+        session.commit()
+    
+    session.close()
+    return {"status": "success"}
+
+
+# ==================== APT API ENDPOINTS ====================
+
+@app.get("/api/apts")
+async def get_apts_json():
+    """Get all APTs as JSON"""
+    session = get_session(DEFAULT_DB_PATH)
+    apts = session.query(APT).order_by(APT.name).all()
+    result = []
+    for apt in apts:
+        result.append({
+            "id": apt.id,
+            "name": apt.name,
+            "aliases": apt.aliases,
+            "description": apt.description,
+            "country_origin": apt.country_origin,
+            "primary_targets": apt.primary_targets,
+            "tactics": apt.tactics,
+            "techniques": apt.techniques,
+            "first_seen": apt.first_seen.isoformat() if apt.first_seen else None,
+            "last_seen": apt.last_seen.isoformat() if apt.last_seen else None,
+            "events_count": len(apt.events),
+            "malware_count": len(apt.malware),
+            "phishing_count": len(apt.phishing),
+            "iocs_count": len(apt.iocs),
+        })
+    session.close()
+    return result
+
+
+@app.get("/api/apts/{id}")
+async def get_apt_json(id: int):
+    """Get APT details as JSON"""
+    session = get_session(DEFAULT_DB_PATH)
+    apt = session.query(APT).filter(APT.id == id).first()
+    
+    if not apt:
+        return {"error": "APT not found"}, 404
+    
+    result = {
+        "id": apt.id,
+        "name": apt.name,
+        "aliases": apt.aliases,
+        "description": apt.description,
+        "country_origin": apt.country_origin,
+        "primary_targets": apt.primary_targets,
+        "tactics": apt.tactics,
+        "techniques": apt.techniques,
+        "first_seen": apt.first_seen.isoformat() if apt.first_seen else None,
+        "last_seen": apt.last_seen.isoformat() if apt.last_seen else None,
+        "events": [{"id": e.id, "title": e.title} for e in apt.events],
+        "malware": [{"id": m.id, "name": m.name} for m in apt.malware],
+        "phishing": [{"id": p.id, "subject": p.subject} for p in apt.phishing],
+        "iocs": [{"id": i.id, "type": i.type, "value": i.value} for i in apt.iocs],
+    }
+    
+    session.close()
+    return result
+
+
+@app.get("/api/charts/apts-top")
+async def top_apts(days: int = 30, top: int = 10):
+    """Get top APTs by activity count within window"""
+    from datetime import timedelta
+    session = get_session(DEFAULT_DB_PATH)
+    now = datetime.utcnow()
+    window_start = now - timedelta(days=days)
+    window_end = now
+    
+    apts = session.query(APT).all()
+    apt_counts = {}
+    
+    for apt in apts:
+        # Count recent activity from linked events
+        recent_events = [e for e in apt.events 
+                        if window_start <= (e.created_at or e.detected_date) < window_end]
+        recent_malware = [m for m in apt.malware 
+                         if window_start <= (m.created_at) < window_end]
+        recent_phishing = [p for p in apt.phishing 
+                          if window_start <= (p.created_at) < window_end]
+        
+        count = len(recent_events) + len(recent_malware) + len(recent_phishing)
+        if count > 0:
+            apt_counts[apt.name] = count
+    
+    sorted_apts = sorted(apt_counts.items(), key=lambda x: x[1], reverse=True)[:top]
+    labels = [name for name, _ in sorted_apts]
+    data = [count for _, count in sorted_apts]
+    
+    session.close()
+    return {"labels": labels, "data": data}

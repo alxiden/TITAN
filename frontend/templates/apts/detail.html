@@ -1,0 +1,249 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>APT: {{ apt.name }} — TITAN</title>
+  <link rel="stylesheet" href="/static/styles.css">
+</head>
+<body>
+  <header>
+    <h1><a href="/">TITAN</a> / <a href="/apts">APTs</a> / {{ apt.name }}</h1>
+  </header>
+
+  <main>
+    <div class="toolbar">
+      <h2>{{ apt.name }}</h2>
+      <div>
+        <a href="/apts/{{ apt.id }}/edit" class="btn">Edit</a>
+        <form method="post" action="/apts/{{ apt.id }}/delete" style="display:inline">
+          <button type="submit" class="btn btn-danger" onclick="return confirm('Delete this APT? This will only delete the APT record, not linked items.')">Delete</button>
+        </form>
+      </div>
+    </div>
+
+    <div class="detail-view">
+      <div class="detail-row">
+        <span class="label">Name:</span>
+        <span>{{ apt.name }}</span>
+      </div>
+      {% if apt.aliases %}
+      <div class="detail-row">
+        <span class="label">Aliases:</span>
+        <span>{{ apt.aliases }}</span>
+      </div>
+      {% endif %}
+      {% if apt.description %}
+      <div class="detail-row">
+        <span class="label">Description:</span>
+        <span>{{ apt.description }}</span>
+      </div>
+      {% endif %}
+      {% if apt.country_origin %}
+      <div class="detail-row">
+        <span class="label">Country of Origin:</span>
+        <span>{{ apt.country_origin }}</span>
+      </div>
+      {% endif %}
+      {% if apt.primary_targets %}
+      <div class="detail-row">
+        <span class="label">Primary Targets:</span>
+        <span>{{ apt.primary_targets }}</span>
+      </div>
+      {% endif %}
+      {% if apt.tactics %}
+      <div class="detail-row">
+        <span class="label">MITRE ATT&CK Tactics:</span>
+        <span>{{ apt.tactics }}</span>
+      </div>
+      {% endif %}
+      {% if apt.techniques %}
+      <div class="detail-row">
+        <span class="label">MITRE ATT&CK Techniques:</span>
+        <span>{{ apt.techniques }}</span>
+      </div>
+      {% endif %}
+      {% if apt.first_seen %}
+      <div class="detail-row">
+        <span class="label">First Seen:</span>
+        <span>{{ apt.first_seen.strftime('%Y-%m-%d') }}</span>
+      </div>
+      {% endif %}
+      {% if apt.last_seen %}
+      <div class="detail-row">
+        <span class="label">Last Seen:</span>
+        <span>{{ apt.last_seen.strftime('%Y-%m-%d') }}</span>
+      </div>
+      {% endif %}
+      <div class="detail-row">
+        <span class="label">Created:</span>
+        <span>{{ apt.created_at.strftime('%Y-%m-%d %H:%M') }}</span>
+      </div>
+      <div class="detail-row">
+        <span class="label">Updated:</span>
+        <span>{{ apt.updated_at.strftime('%Y-%m-%d %H:%M') }}</span>
+      </div>
+    </div>
+
+    <!-- Linked Events Section -->
+    <div class="content-section">
+      <h3>Linked Events ({{ apt.events|length }})</h3>
+      {% if apt.events %}
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th>Title</th>
+            <th>Type</th>
+            <th>Severity</th>
+            <th>Status</th>
+            <th>Date</th>
+            <th>Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for event in apt.events %}
+          <tr>
+            <td><a href="/events/{{ event.id }}">{{ event.title }}</a></td>
+            <td>{{ event.type.value if event.type else '—' }}</td>
+            <td>{{ event.severity or '—' }}</td>
+            <td><span class="badge badge-{{ event.status.value }}">{{ event.status.value }}</span></td>
+            <td>{{ (event.event_date or event.detected_date).strftime('%Y-%m-%d') }}</td>
+            <td class="actions">
+              <form method="post" action="/apts/{{ apt.id }}/unlink/event/{{ event.id }}" style="display:inline">
+                <button type="submit" class="btn-small btn-danger" onclick="return confirm('Unlink this event from the APT?')">Unlink</button>
+              </form>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      {% else %}
+      <p class="muted">No events linked to this APT.</p>
+      {% endif %}
+    </div>
+
+    <!-- Linked Malware Section -->
+    <div class="content-section">
+      <h3>Linked Malware ({{ apt.malware|length }})</h3>
+      {% if apt.malware %}
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th>Name</th>
+            <th>Family</th>
+            <th>Event</th>
+            <th>IOCs</th>
+            <th>Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for malware in apt.malware %}
+          <tr>
+            <td><a href="/malware/{{ malware.id }}">{{ malware.name }}</a></td>
+            <td>{{ malware.family_ref.name if malware.family_ref else (malware.family or '—') }}</td>
+            <td>
+              {% if malware.event %}
+              <a href="/events/{{ malware.event.id }}">{{ malware.event.title }}</a>
+              {% else %}
+              —
+              {% endif %}
+            </td>
+            <td>{{ malware.iocs|length }}</td>
+            <td class="actions">
+              <form method="post" action="/apts/{{ apt.id }}/unlink/malware/{{ malware.id }}" style="display:inline">
+                <button type="submit" class="btn-small btn-danger" onclick="return confirm('Unlink this malware from the APT?')">Unlink</button>
+              </form>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      {% else %}
+      <p class="muted">No malware linked to this APT.</p>
+      {% endif %}
+    </div>
+
+    <!-- Linked Phishing Section -->
+    <div class="content-section">
+      <h3>Linked Phishing ({{ apt.phishing|length }})</h3>
+      {% if apt.phishing %}
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th>Subject</th>
+            <th>Sender</th>
+            <th>Target</th>
+            <th>Risk Level</th>
+            <th>Event</th>
+            <th>Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for phish in apt.phishing %}
+          <tr>
+            <td><a href="/phish/{{ phish.id }}">{{ phish.subject or '—' }}</a></td>
+            <td>{{ phish.sender or '—' }}</td>
+            <td>{{ phish.target or '—' }}</td>
+            <td>{{ phish.risk_level or '—' }}</td>
+            <td>
+              {% if phish.event %}
+              <a href="/events/{{ phish.event.id }}">{{ phish.event.title }}</a>
+              {% else %}
+              —
+              {% endif %}
+            </td>
+            <td class="actions">
+              <form method="post" action="/apts/{{ apt.id }}/unlink/phish/{{ phish.id }}" style="display:inline">
+                <button type="submit" class="btn-small btn-danger" onclick="return confirm('Unlink this phishing from the APT?')">Unlink</button>
+              </form>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      {% else %}
+      <p class="muted">No phishing linked to this APT.</p>
+      {% endif %}
+    </div>
+
+    <!-- Linked IOCs Section -->
+    <div class="content-section">
+      <h3>Linked IOCs ({{ apt.iocs|length }})</h3>
+      {% if apt.iocs %}
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th>Type</th>
+            <th>Value</th>
+            <th>Description</th>
+            <th>Confidence</th>
+            <th>Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for ioc in apt.iocs %}
+          <tr>
+            <td><span class="badge">{{ ioc.type }}</span></td>
+            <td><code>{{ ioc.value }}</code></td>
+            <td>{{ ioc.description or '—' }}</td>
+            <td>{{ ioc.confidence if ioc.confidence else '—' }}</td>
+            <td class="actions">
+              <form method="post" action="/apts/{{ apt.id }}/unlink/ioc/{{ ioc.id }}" style="display:inline">
+                <button type="submit" class="btn-small btn-danger" onclick="return confirm('Unlink this IOC from the APT?')">Unlink</button>
+              </form>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      {% else %}
+      <p class="muted">No IOCs linked to this APT.</p>
+      {% endif %}
+    </div>
+  </main>
+
+  <footer>
+    <p class="muted"><a href="/apts">← Back to APTs</a></p>
+  </footer>
+</body>
+</html>

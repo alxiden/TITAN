@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Add APT — TITAN</title>
+  <link rel="stylesheet" href="/static/styles.css">
+</head>
+<body>
+  <header>
+    <h1><a href="/">TITAN</a> / <a href="/apts">APTs</a> / Add</h1>
+  </header>
+
+  <main>
+    <form method="post" action="/apts/new" class="form">
+      <div class="form-group">
+        <label for="name">APT Name *</label>
+        <input type="text" name="name" id="name" required placeholder="e.g., APT28, Lazarus, etc.">
+      </div>
+
+      <div class="form-group">
+        <label for="aliases">Aliases</label>
+        <input type="text" name="aliases" id="aliases" placeholder="e.g., Fancy Bear, Sofacy (comma-separated)">
+      </div>
+
+      <div class="form-group">
+        <label for="description">Description</label>
+        <textarea name="description" id="description" rows="4" placeholder="Detailed description of the APT..."></textarea>
+      </div>
+
+      <div class="form-group">
+        <label for="country_origin">Country of Origin</label>
+        <input type="text" name="country_origin" id="country_origin" placeholder="e.g., Russia, China, North Korea">
+      </div>
+
+      <div class="form-group">
+        <label for="primary_targets">Primary Targets</label>
+        <input type="text" name="primary_targets" id="primary_targets" placeholder="e.g., Government, Defense, Energy (comma-separated)">
+      </div>
+
+      <div class="form-group">
+        <label for="tactics">MITRE ATT&CK Tactics</label>
+        <input type="text" name="tactics" id="tactics" placeholder="e.g., Reconnaissance, Execution, Persistence (comma-separated)">
+      </div>
+
+      <div class="form-group">
+        <label for="techniques">MITRE ATT&CK Techniques</label>
+        <input type="text" name="techniques" id="techniques" placeholder="e.g., T1087, T1059, T1055 (comma-separated)">
+      </div>
+
+      <div class="form-group">
+        <label for="first_seen">First Seen</label>
+        <input type="date" name="first_seen" id="first_seen">
+      </div>
+
+      <div class="form-group">
+        <label for="last_seen">Last Seen</label>
+        <input type="date" name="last_seen" id="last_seen">
+      </div>
+
+      <div class="form-actions">
+        <button type="submit" class="btn btn-primary">Create APT</button>
+        <a href="/apts" class="btn">Cancel</a>
+      </div>
+    </form>
+  </main>
+
+  <footer>
+    <p class="muted"><a href="/apts">← Back to APTs</a></p>
+  </footer>
+</body>
+</html>

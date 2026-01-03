@@ -7,6 +7,35 @@ import enum
 
 Base = declarative_base()
 
+# Association tables for many-to-many relationships with APT
+apt_events = Table(
+    'apt_events',
+    Base.metadata,
+    Column('apt_id', Integer, ForeignKey('apts.id'), primary_key=True),
+    Column('event_id', Integer, ForeignKey('events.id'), primary_key=True)
+)
+
+apt_malware = Table(
+    'apt_malware',
+    Base.metadata,
+    Column('apt_id', Integer, ForeignKey('apts.id'), primary_key=True),
+    Column('malware_id', Integer, ForeignKey('malware.id'), primary_key=True)
+)
+
+apt_phishing = Table(
+    'apt_phishing',
+    Base.metadata,
+    Column('apt_id', Integer, ForeignKey('apts.id'), primary_key=True),
+    Column('phish_id', Integer, ForeignKey('phishing.id'), primary_key=True)
+)
+
+apt_iocs = Table(
+    'apt_iocs',
+    Base.metadata,
+    Column('apt_id', Integer, ForeignKey('apts.id'), primary_key=True),
+    Column('ioc_id', Integer, ForeignKey('iocs.id'), primary_key=True)
+)
+
 
 class EventStatus(enum.Enum):
     OPEN = "open"
@@ -24,6 +53,29 @@ class EventType(enum.Enum):
     OTHER = "other"
 
 
+class APT(Base):
+    """Advanced Persistent Threat entity"""
+    __tablename__ = "apts"
+    id = Column(Integer, primary_key=True)
+    name = Column(String(256), nullable=False, unique=True)
+    aliases = Column(Text, nullable=True)  # Comma-separated list of known aliases
+    description = Column(Text, nullable=True)
+    country_origin = Column(String(128), nullable=True)
+    primary_targets = Column(Text, nullable=True)  # Comma-separated list
+    tactics = Column(Text, nullable=True)  # Comma-separated MITRE ATT&CK tactics
+    techniques = Column(Text, nullable=True)  # Comma-separated MITRE ATT&CK techniques
+    first_seen = Column(DateTime, nullable=True)
+    last_seen = Column(DateTime, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+    
+    # Relationships
+    events = relationship("Event", secondary=apt_events, back_populates="apts")
+    malware = relationship("Malware", secondary=apt_malware, back_populates="apts")
+    phishing = relationship("Phish", secondary=apt_phishing, back_populates="apts")
+    iocs = relationship("IOC", secondary=apt_iocs, back_populates="apts")
+
+
 class Event(Base):
     """Security incident/event - main entity"""
     __tablename__ = "events"
@@ -39,6 +91,7 @@ class Event(Base):
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
     
     # Relationships
+    apts = relationship("APT", secondary=apt_events, back_populates="events")
     malware_instances = relationship("Malware", back_populates="event")
     phishing_instances = relationship("Phish", back_populates="event")
     mitigations = relationship("Mitigation", back_populates="event", cascade="all, delete-orphan")
@@ -57,6 +110,7 @@ class Malware(Base):
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
     
     # Relationships
+    apts = relationship("APT", secondary=apt_malware, back_populates="malware")
     event = relationship("Event", back_populates="malware_instances")
     iocs = relationship("IOC", back_populates="malware", cascade="all, delete-orphan")
     family_ref = relationship("MalwareFamily", back_populates="malware_items")
@@ -76,6 +130,7 @@ class Phish(Base):
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
     
     # Relationships
+    apts = relationship("APT", secondary=apt_phishing, back_populates="phishing")
     event = relationship("Event", back_populates="phishing_instances")
     iocs = relationship("IOC", back_populates="phish", cascade="all, delete-orphan")
 
@@ -96,6 +151,7 @@ class IOC(Base):
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
     
     # Relationships
+    apts = relationship("APT", secondary=apt_iocs, back_populates="iocs")
     malware = relationship("Malware", back_populates="iocs")
     phish = relationship("Phish", back_populates="iocs")
 

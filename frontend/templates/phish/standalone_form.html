@@ -59,6 +59,16 @@
         </select>
       </div>
 
+      <div class="form-group">
+        <label for="apt_ids">Link to APTs</label>
+        <select name="apt_ids" id="apt_ids" multiple size="5">
+          {% for apt in apts %}
+          <option value="{{ apt.id }}">{{ apt.name }}</option>
+          {% endfor %}
+        </select>
+        <p class="muted" style="font-size:0.85rem; margin-top:0.25rem;">Hold Ctrl (Cmd on Mac) to select multiple APTs.</p>
+      </div>
+
       <div class="form-actions">
         <button type="submit" class="btn btn-primary">Create</button>
         <a href="/phishing" class="btn">Cancel</a>

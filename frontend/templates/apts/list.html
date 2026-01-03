@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>APTs — TITAN</title>
+  <link rel="stylesheet" href="/static/styles.css">
+</head>
+<body>
+  <header>
+    <h1><a href="/">TITAN</a> / APTs</h1>
+  </header>
+
+  <main>
+    <div class="toolbar">
+      <h2>Advanced Persistent Threats ({{ apts|length }})</h2>
+      <a href="/apts/new/form" class="btn btn-primary">+ Add APT</a>
+    </div>
+    <div class="form-group" style="max-width:420px; margin:0 0 1rem 0;">
+      <label for="apt-search" class="muted">Search APTs</label>
+      <input type="text" id="apt-search" placeholder="Type to filter by any column">
+    </div>
+
+    {% if apts %}
+    <table class="data-table">
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th>Aliases</th>
+          <th>Country</th>
+          <th>Events</th>
+          <th>Malware</th>
+          <th>Phishing</th>
+          <th>IOCs</th>
+          <th>Actions</th>
+        </tr>
+      </thead>
+      <tbody id="apt-tbody">
+        {% for apt in apts %}
+        <tr>
+          <td><a href="/apts/{{ apt.id }}">{{ apt.name }}</a></td>
+          <td>{{ apt.aliases or '—' }}</td>
+          <td>{{ apt.country_origin or '—' }}</td>
+          <td>{{ apt.events|length }}</td>
+          <td>{{ apt.malware|length }}</td>
+          <td>{{ apt.phishing|length }}</td>
+          <td>{{ apt.iocs|length }}</td>
+          <td class="actions">
+            <a href="/apts/{{ apt.id }}/edit" class="btn-small">Edit</a>
+            <form method="post" action="/apts/{{ apt.id }}/delete" style="display:inline">
+              <button type="submit" class="btn-small btn-danger" onclick="return confirm('Delete this APT? This will only delete the APT record, not linked items.')">Delete</button>
+            </form>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+    <p class="muted">No APTs yet. <a href="/apts/new/form">Add one</a>.</p>
+    {% endif %}
+  </main>
+
+  <footer>
+    <p class="muted"><a href="/">← Home</a></p>
+  </footer>
+  <script>
+    (function(){
+      const input = document.getElementById('apt-search');
+      const tbody = document.getElementById('apt-tbody');
+      if(!input || !tbody) return;
+      input.addEventListener('input', function(){
+        const q = this.value.trim().toLowerCase();
+        for (const row of tbody.rows) {
+          const text = row.innerText.toLowerCase();
+          row.style.display = text.includes(q) ? '' : 'none';
+        }
+      });
+    })();
+  </script>
+</body>
+</html>
