@@ -109,6 +109,11 @@
       ✓ Malware family added.
     </div>
     {% endif %}
+    {% if request.query_params.get('security_email_updated') == 'true' %}
+    <div class="success-message">
+      ✓ Security contact email updated.
+    </div>
+    {% endif %}
 
     <!-- Database Statistics -->
     <div class="settings-section">
@@ -164,6 +169,19 @@
           📄 Export Data as JSON
         </a>
       </div>
+    </div>
+
+    <!-- Security Contact -->
+    <div class="settings-section">
+      <h3>🛡️ Security Contact</h3>
+      <p class="muted" style="margin-bottom: 1rem;">Set the security team email used in reports and phishing guidance.</p>
+      <form method="post" action="/settings/security-email" class="form" style="max-width: 420px;">
+        <div class="form-group">
+          <label for="security_email">Security team email</label>
+          <input id="security_email" name="security_email" type="email" value="{{ security_email }}" required>
+        </div>
+        <button type="submit" class="btn btn-primary">Save Security Email</button>
+      </form>
     </div>
 
     <!-- Imports -->
