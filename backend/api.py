@@ -10,7 +10,7 @@ from .db_init import get_session, DEFAULT_DB_PATH
 from .db_models import Event, Malware, MalwareFamily, Phish, IOC, Mitigation, APT, EventStatus, EventType
 from jinja2 import Environment, FileSystemLoader, select_autoescape
 from datetime import datetime
-from typing import Optional
+from typing import Optional, List
 
 TEMPLATES_DIR = Path(__file__).resolve().parent.parent / "frontend" / "templates"
 STATIC_DIR = Path(__file__).resolve().parent.parent / "frontend" / "static"
@@ -795,17 +795,28 @@ async def generate_report(audience: str, period_type: str, period: str):
 
     events_in_window = [e for e in events if event_in_window(e)]
     
-    # Fetch malware instances in the period
-    malware_items = session.query(Malware).filter(
+    # Fetch malware/phishing instances that intersect with the window (initial SQL filter),
+    # then constrain by primary timeline date: occurrence_date if present, else created_at.
+    malware_raw = session.query(Malware).filter(
         ((Malware.created_at >= window_start) & (Malware.created_at < window_end)) |
         ((Malware.occurrence_date >= window_start) & (Malware.occurrence_date < window_end))
     ).all()
-    
-    # Fetch phishing instances in the period
-    phishing_items = session.query(Phish).filter(
+    phishing_raw = session.query(Phish).filter(
         ((Phish.created_at >= window_start) & (Phish.created_at < window_end)) |
         ((Phish.occurrence_date >= window_start) & (Phish.occurrence_date < window_end))
     ).all()
+    
+    def in_window(dt):
+        return (dt is not None) and (window_start <= dt < window_end)
+    
+    def malware_date(m):
+        return m.occurrence_date if m.occurrence_date else m.created_at
+    
+    def phish_date(p):
+        return p.occurrence_date if p.occurrence_date else p.created_at
+    
+    malware_items = [m for m in malware_raw if in_window(malware_date(m))]
+    phishing_items = [p for p in phishing_raw if in_window(phish_date(p))]
     
     # Count summary statistics
     total_events = len(events_in_window)  # New events in this period (by event_date when present)
@@ -817,10 +828,10 @@ async def generate_report(audience: str, period_type: str, period: str):
     resolved_events = len([e for e in events_in_window if e.status == EventStatus.RESOLVED])
     in_progress_events = len([e for e in events_in_window if e.status == EventStatus.IN_PROGRESS])
     
-    critical_events = len([e for e in events if e.severity == "critical"])
-    high_events = len([e for e in events if e.severity == "high"])
-    medium_events = len([e for e in events if e.severity == "medium"])
-    low_events = len([e for e in events if e.severity == "low"])
+    critical_events = len([e for e in events_in_window if e.severity == "critical"])
+    high_events = len([e for e in events_in_window if e.severity == "high"])
+    medium_events = len([e for e in events_in_window if e.severity == "medium"])
+    low_events = len([e for e in events_in_window if e.severity == "low"])
     
     total_malware = len(malware_items)
     total_phishing = len(phishing_items)
@@ -856,11 +867,11 @@ async def generate_report(audience: str, period_type: str, period: str):
     daily_malware = defaultdict(int)
     daily_phishing = defaultdict(int)
     for m in malware_items:
-        dt = m.occurrence_date if m.occurrence_date else m.created_at
+        dt = malware_date(m)
         day_key = dt.strftime('%Y-%m-%d')
         daily_malware[day_key] += 1
     for p in phishing_items:
-        dt = p.occurrence_date if p.occurrence_date else p.created_at
+        dt = phish_date(p)
         day_key = dt.strftime('%Y-%m-%d')
         daily_phishing[day_key] += 1
     
@@ -873,7 +884,7 @@ async def generate_report(audience: str, period_type: str, period: str):
     
     # Get associated APTs
     apt_associations = {}
-    for event in events:
+    for event in events_in_window:
         for apt in event.apts:
             apt_name = apt.name
             apt_associations[apt_name] = apt_associations.get(apt_name, 0) + 1
@@ -1319,23 +1330,23 @@ def generate_users_report(period_label, total_events, resolved_events, critical_
     <p>This report highlights security threats and incidents detected in our organization during {period_label}. Your awareness and action are critical to our defense.</p>
     
     <h2>Key Threats Detected</h2>
-    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 2rem; margin: 2rem 0;">
-      <div style="background-color: #fce4e4; padding: 1.5rem; border-radius: 6px; border-left: 4px solid #d93025;">
-        <h3 style="color: #d93025; margin-top: 0;">Phishing Attempts</h3>
-        <p style="font-size: 2rem; font-weight: bold; color: #d93025; margin: 0.5rem 0;">{total_phishing}</p>
-        <p>Suspicious emails detected and blocked during {period_label}.</p>
-      </div>
-      <div style="background-color: #fef3c7; padding: 1.5rem; border-radius: 6px; border-left: 4px solid #f9ab00;">
-        <h3 style="color: #f9ab00; margin-top: 0;">Critical Alerts</h3>
-        <p style="font-size: 2rem; font-weight: bold; color: #f9ab00; margin: 0.5rem 0;">{critical_events + high_events}</p>
-        <p>High-priority security incidents requiring immediate attention.</p>
-      </div>
-    </div>
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 2rem; margin: 2rem 0;">
+            <div style="background-color: #fce4e4; padding: 1.5rem; border-radius: 6px; border-left: 4px solid #d93025; color: #1f2937;">
+                <h3 style="color: #d93025; margin-top: 0;">Phishing Attempts</h3>
+                <p style="font-size: 2rem; font-weight: bold; color: #d93025; margin: 0.5rem 0;">{total_phishing}</p>
+                <p style="color: #1f2937;">Suspicious emails detected and blocked during {period_label}.</p>
+            </div>
+            <div style="background-color: #fef3c7; padding: 1.5rem; border-radius: 6px; border-left: 4px solid #f9ab00; color: #1f2937;">
+                <h3 style="color: #f9ab00; margin-top: 0;">Critical Alerts</h3>
+                <p style="font-size: 2rem; font-weight: bold; color: #f9ab00; margin: 0.5rem 0;">{critical_events + high_events}</p>
+                <p style="color: #1f2937;">High-priority security incidents requiring immediate attention.</p>
+            </div>
+        </div>
     
     <h2>What You Should Do</h2>
-    <div style="margin: 2rem 0; color: #fff;">
+        <div style="margin: 2rem 0;">
       <h3 style="background-color: #e3f2fd; padding: 0.75rem 1rem; border-left: 4px solid #1a73e8; margin: 0; color: #0f172a;">Protect Yourself from Phishing</h3>
-      <ul style="margin-top: 1rem; color: #fff;">
+            <ul style="margin-top: 1rem;">
         <li><strong>Verify senders:</strong> Check email addresses carefully, even if they look legitimate</li>
         <li><strong>Hover before clicking:</strong> Hover over links to see the actual destination before clicking</li>
         <li><strong>Don't trust attachments:</strong> Unexpected attachments may contain malware</li>
@@ -1713,6 +1724,7 @@ async def update_malware(
     session = get_session(DEFAULT_DB_PATH)
     malware = session.query(Malware).filter(Malware.id == id).first()
     if malware:
+        redirect_event_id = malware.event_id
         parsed_date = None
         if occurrence_date:
             try:
@@ -1741,7 +1753,7 @@ async def update_malware(
         
         session.commit()
         session.close()
-        return RedirectResponse(url=f"/events/{malware.event_id}", status_code=303)
+        return RedirectResponse(url=f"/events/{redirect_event_id}", status_code=303)
     session.close()
     return RedirectResponse(url="/events", status_code=303)
 
@@ -1780,8 +1792,9 @@ async def create_phish(
     sender: Optional[str] = Form(None),
     target: Optional[str] = Form(None),
     description: Optional[str] = Form(None),
+    risk_level: Optional[str] = Form(None),
     occurrence_date: Optional[str] = Form(None),
-    apt_ids: list = Form(None),
+    apt_ids: Optional[List[int]] = Form(None),
 ):
     session = get_session(DEFAULT_DB_PATH)
     parsed_date = None
@@ -1795,6 +1808,7 @@ async def create_phish(
         sender=sender,
         target=target,
         description=description,
+        risk_level=risk_level,
         occurrence_date=parsed_date,
         event_id=event_id,
     )
@@ -1840,11 +1854,12 @@ async def update_phish(
     description: Optional[str] = Form(None),
     risk_level: Optional[str] = Form(None),
     occurrence_date: Optional[str] = Form(None),
-    apt_ids: list = Form(None),
+    apt_ids: Optional[List[int]] = Form(None),
 ):
     session = get_session(DEFAULT_DB_PATH)
     phish = session.query(Phish).filter(Phish.id == id).first()
     if phish:
+        redirect_event_id = phish.event_id
         parsed_date = None
         if occurrence_date:
             try:
@@ -1873,8 +1888,8 @@ async def update_phish(
         
         session.commit()
         session.close()
-        if phish.event_id:
-            return RedirectResponse(url=f"/events/{phish.event_id}", status_code=303)
+        if redirect_event_id:
+            return RedirectResponse(url=f"/events/{redirect_event_id}", status_code=303)
         else:
             return RedirectResponse(url="/phishing", status_code=303)
     session.close()
@@ -2054,12 +2069,13 @@ async def update_mitigation(
     session = get_session(DEFAULT_DB_PATH)
     mitigation = session.query(Mitigation).filter(Mitigation.id == id).first()
     if mitigation:
+        redirect_event_id = mitigation.event_id
         mitigation.title = title
         mitigation.description = description
         mitigation.assigned_to = assigned_to
         session.commit()
         session.close()
-        return RedirectResponse(url=f"/events/{mitigation.event_id}", status_code=303)
+        return RedirectResponse(url=f"/events/{redirect_event_id}", status_code=303)
     session.close()
     return RedirectResponse(url="/events", status_code=303)
 
