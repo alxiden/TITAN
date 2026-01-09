@@ -835,6 +835,8 @@ async def generate_report(audience: str, period_type: str, period: str):
     
     total_malware = len(malware_items)
     total_phishing = len(phishing_items)
+    malware_linked_to_events = len([m for m in malware_items if m.event_id is not None])
+    phishing_linked_to_events = len([p for p in phishing_items if p.event_id is not None])
     
     # Get severity distribution
     severity_counts = {}
@@ -904,8 +906,8 @@ async def generate_report(audience: str, period_type: str, period: str):
     # Generate HTML report based on audience
     if audience == "exec":
         html = generate_executive_report(period_label, period_type, total_events, open_events, resolved_events, 
-                                         critical_events, high_events, total_malware, 
-                                         total_phishing, severity_counts, top_malware, top_senders,
+                                         critical_events, high_events, total_malware, malware_linked_to_events,
+                                         total_phishing, phishing_linked_to_events, severity_counts, event_type_counts, top_malware, top_senders,
                                          daily_malware, daily_phishing, top_targets, top_apts)
     elif audience == "it":
         html = generate_it_report(period_label, total_events, open_events, resolved_events, in_progress_events,
@@ -913,15 +915,15 @@ async def generate_report(audience: str, period_type: str, period: str):
                                   total_malware, total_phishing, event_type_counts, top_malware, 
                                   top_senders, malware_items, phishing_items)
     else:  # users
-        html = generate_users_report(period_label, total_events, resolved_events, critical_events, 
-                                     high_events, total_phishing, security_email)
+        html = generate_users_report(period_label, total_events, resolved_events, event_type_counts,
+                                     total_phishing, total_malware, security_email)
     
     return {"html": html}
 
 
 def generate_executive_report(period_label, period_type, total_events, open_events, resolved_events, critical_events,
-                              high_events, total_malware, total_phishing, severity_counts, 
-                              top_malware, top_senders, daily_malware, daily_phishing, 
+                              high_events, total_malware, malware_linked_to_events, total_phishing, phishing_linked_to_events,
+                              severity_counts, event_type_counts, top_malware, top_senders, daily_malware, daily_phishing, 
                               top_targets, top_apts):
     """Generate executive summary report"""
     
@@ -941,9 +943,39 @@ def generate_executive_report(period_label, period_type, total_events, open_even
         # Create SVG-based trend chart
         trend_chart_html = generate_trend_chart(trend_data)
     
+    # Generate severity HTML with all categories
+    severity_order = ['critical', 'high', 'medium', 'low']
+    severity_colors = {
+        'critical': '#d93025',
+        'high': '#f9ab00',
+        'medium': '#1a73e8',
+        'low': '#1e8e3e'
+    }
+    # Generate event types HTML with boxes
+    event_type_order = ['phishing', 'malware', 'breach', 'insider_threat', 'vulnerability', 'policy_violation', 'other']
+    event_type_colors = {
+        'phishing': '#d93025',
+        'malware': '#d93025',
+        'breach': '#9c27b0',
+        'insider_threat': '#f9ab00',
+        'vulnerability': '#1a73e8',
+        'policy_violation': '#5f6368',
+        'other': '#5f6368'
+    }
+    event_types_html = "".join([
+        f"""<div style='flex: 1; background-color: #fff; padding: 0.75rem; border-radius: 4px; border: 1px solid #d0d7de; text-align: center; min-width: 120px;'>
+          <div style='font-size: 0.875rem; color: #5f6368; margin-bottom: 0.25rem;'>{et.replace('_', ' ').title()}</div>
+          <div style='font-size: 1.5rem; font-weight: bold; color: {event_type_colors.get(et, '#5f6368')};'>{event_type_counts.get(et, 0)}</div>
+        </div>"""
+        for et in event_type_order
+    ])
+    
     severity_html = "".join([
-        f"<div class='metric'><div class='metric-value'>{count}</div><div class='metric-label'>{sev.title()}</div></div>"
-        for sev, count in sorted(severity_counts.items())
+        f"""<div style='flex: 1; background-color: #fff; padding: 0.75rem; border-radius: 4px; border: 1px solid #d0d7de; text-align: center;'>
+          <div style='font-size: 0.875rem; color: #5f6368; margin-bottom: 0.25rem;'>{sev.title()}</div>
+          <div style='font-size: 1.5rem; font-weight: bold; color: {severity_colors[sev]};'>{severity_counts.get(sev, 0)}</div>
+        </div>"""
+        for sev in severity_order
     ])
     
     malware_html = "".join([
@@ -1009,25 +1041,52 @@ def generate_executive_report(period_label, period_type, total_events, open_even
         <div class="metric-value" style="color: #1e8e3e;">{resolved_events}</div>
         <div class="metric-label">Resolved Events</div>
       </div>
-      <div class="metric">
-        <div class="metric-value" style="color: #f9ab00;">{critical_events + high_events}</div>
-        <div class="metric-label">Critical/High Priority</div>
-      </div>
     </div>
     
     {trend_section}
     
     <h2>Threat Overview</h2>
     <div style="margin: 2rem 0;">
-      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 2rem; margin: 1.5rem 0;">
-        <div>
-          <p><strong>Malware Incidents:</strong> {total_malware}</p>
-          <p><strong>Phishing Attempts:</strong> {total_phishing}</p>
+      <div style="display: flex; flex-direction: column; gap: 1.5rem; margin: 1.5rem 0;">
+        <div style="background-color: #e8f5e9; padding: 1.5rem; border-radius: 6px; border-left: 4px solid #1e8e3e;">
+          <h3 style="margin-top: 0; color: #1e8e3e;">Event Types</h3>
+          <div style="display: flex; gap: 1rem; flex-wrap: wrap; margin-top: 1rem;">
+            {event_types_html}
+          </div>
         </div>
-        <div>
-          <p><strong>Severity Distribution:</strong></p>
-          <div style="display: flex; gap: 1rem;">
+        <div style="background-color: #fef3e0; padding: 1.5rem; border-radius: 6px; border-left: 4px solid #f9ab00;">
+          <h3 style="margin-top: 0; color: #f9ab00;">Severity Distribution</h3>
+          <div style="display: flex; gap: 1rem; margin-top: 1rem;">
             {severity_html}
+          </div>
+        </div>
+        <div style="background-color: #f3e5f5; padding: 1.5rem; border-radius: 6px; border-left: 4px solid #9c27b0;">
+          <h3 style="margin-top: 0; color: #9c27b0;">Attack Vectors</h3>
+          <div style="margin: 1rem 0;">
+            <p style="font-size: 1.25rem; margin: 0 0 0.75rem 0; font-weight: bold; color: #9c27b0;">Malware Incidents: <span style="color: #d93025;">{total_malware}</span></p>
+            <div style="display: flex; gap: 1rem;">
+              <div style="flex: 1; background-color: #fff; padding: 0.75rem; border-radius: 4px; border: 1px solid #d0d7de;">
+                <div style="font-size: 0.875rem; color: #5f6368; margin-bottom: 0.25rem;">Linked to Events</div>
+                <div style="font-size: 1.5rem; font-weight: bold; color: #1e8e3e;">{malware_linked_to_events}</div>
+              </div>
+              <div style="flex: 1; background-color: #fff; padding: 0.75rem; border-radius: 4px; border: 1px solid #d0d7de;">
+                <div style="font-size: 0.875rem; color: #5f6368; margin-bottom: 0.25rem;">Standalone</div>
+                <div style="font-size: 1.5rem; font-weight: bold; color: #f9ab00;">{total_malware - malware_linked_to_events}</div>
+              </div>
+            </div>
+          </div>
+          <div style="margin: 1rem 0;">
+            <p style="font-size: 1.25rem; margin: 0 0 0.75rem 0; font-weight: bold; color: #9c27b0;">Phishing Attempts: <span style="color: #d93025;">{total_phishing}</span></p>
+            <div style="display: flex; gap: 1rem;">
+              <div style="flex: 1; background-color: #fff; padding: 0.75rem; border-radius: 4px; border: 1px solid #d0d7de;">
+                <div style="font-size: 0.875rem; color: #5f6368; margin-bottom: 0.25rem;">Linked to Events</div>
+                <div style="font-size: 1.5rem; font-weight: bold; color: #1e8e3e;">{phishing_linked_to_events}</div>
+              </div>
+              <div style="flex: 1; background-color: #fff; padding: 0.75rem; border-radius: 4px; border: 1px solid #d0d7de;">
+                <div style="font-size: 0.875rem; color: #5f6368; margin-bottom: 0.25rem;">Standalone</div>
+                <div style="font-size: 1.5rem; font-weight: bold; color: #f9ab00;">{total_phishing - phishing_linked_to_events}</div>
+              </div>
+            </div>
           </div>
         </div>
       </div>
@@ -1120,13 +1179,12 @@ def generate_trend_chart(trend_data):
         grid_lines += f'<line x1="{padding}" y1="{y}" x2="{width - padding}" y2="{y}" stroke="#e0e0e0" stroke-width="1"/>\n'
         y_labels += f'<text x="{padding - 10}" y="{y + 4}" text-anchor="end" font-size="12" fill="#666">{value}</text>\n'
     
-    # Generate data points and bars
+    # Generate data points for line charts
     points = []
     malware_points = []
     phishing_points = []
     
     x_step = chart_width / (len(trend_data) - 1) if len(trend_data) > 1 else chart_width
-    bar_width = (x_step * 0.35)
     
     # Determine label format based on data (date vs month)
     use_short_dates = len(trend_data) > 12  # If more than 12 data points, use short date format
@@ -1137,15 +1195,17 @@ def generate_trend_chart(trend_data):
         malware_height = (data['malware'] / max_value) * chart_height
         phishing_height = (data['phishing'] / max_value) * chart_height
         
-        # Malware bar (left)
-        malware_x = x_base - (bar_width / 2)
+        # Calculate y positions (SVG y-axis is inverted)
         malware_y = height - padding - malware_height
-        points.append(f'<rect x="{malware_x}" y="{malware_y}" width="{bar_width}" height="{malware_height}" fill="#1a73e8" opacity="0.8"/>')
-        
-        # Phishing bar (right)
-        phishing_x = x_base + (bar_width / 2)
         phishing_y = height - padding - phishing_height
-        points.append(f'<rect x="{phishing_x}" y="{phishing_y}" width="{bar_width}" height="{phishing_height}" fill="#d93025" opacity="0.8"/>')
+        
+        # Add points to line paths
+        malware_points.append(f"{x_base},{malware_y}")
+        phishing_points.append(f"{x_base},{phishing_y}")
+        
+        # Add circles at data points
+        points.append(f'<circle cx="{x_base}" cy="{malware_y}" r="4" fill="#1a73e8" opacity="0.9"/>')
+        points.append(f'<circle cx="{x_base}" cy="{phishing_y}" r="4" fill="#d93025" opacity="0.9"/>')
         
         # Date/label
         label_key = 'date' if 'date' in data else 'month'
@@ -1163,6 +1223,54 @@ def generate_trend_chart(trend_data):
         if show_label:
             points.append(f'<text x="{x_base}" y="{height - padding + 20}" text-anchor="middle" font-size="11" fill="#333">{label_text}</text>')
     
+    # Generate data points for line charts
+    points = []
+    malware_points = []
+    phishing_points = []
+    
+    x_step = chart_width / (len(trend_data) - 1) if len(trend_data) > 1 else chart_width
+    
+    # Determine label format based on data (date vs month)
+    use_short_dates = len(trend_data) > 12  # If more than 12 data points, use short date format
+    
+    for idx, data in enumerate(trend_data):
+        x_base = padding + (idx * x_step)
+        
+        malware_height = (data['malware'] / max_value) * chart_height
+        phishing_height = (data['phishing'] / max_value) * chart_height
+        
+        # Calculate y positions (SVG y-axis is inverted)
+        malware_y = height - padding - malware_height
+        phishing_y = height - padding - phishing_height
+        
+        # Add points to line paths
+        malware_points.append(f"{x_base},{malware_y}")
+        phishing_points.append(f"{x_base},{phishing_y}")
+        
+        # Add circles at data points
+        points.append(f'<circle cx="{x_base}" cy="{malware_y}" r="4" fill="#1a73e8" opacity="0.9"/>')
+        points.append(f'<circle cx="{x_base}" cy="{phishing_y}" r="4" fill="#d93025" opacity="0.9"/>')
+        
+        # Date/label
+        label_key = 'date' if 'date' in data else 'month'
+        label_text = data[label_key]
+        
+        # For dates, show only every nth label to avoid crowding
+        show_label = True
+        if use_short_dates:
+            # Show every 5th label
+            show_label = (idx % 5 == 0 or idx == len(trend_data) - 1)
+            if show_label and label_key == 'date':
+                # Convert YYYY-MM-DD to MM/DD format
+                label_text = '/'.join(label_text.split('-')[1:])
+        
+        if show_label:
+            points.append(f'<text x="{x_base}" y="{height - padding + 20}" text-anchor="middle" font-size="11" fill="#333">{label_text}</text>')
+    
+    # Create line paths
+    malware_path = f'<path d="M {" L ".join(malware_points)}" stroke="#1a73e8" stroke-width="2" fill="none" opacity="0.9"/>'
+    phishing_path = f'<path d="M {" L ".join(phishing_points)}" stroke="#d93025" stroke-width="2" fill="none" opacity="0.9"/>'
+    
     svg = f"""
         <div>
       <svg width="{width}" height="{height}" style="border: 1px solid #e0e0e0; border-radius: 4px; background-color: white; max-width: 100%;">
@@ -1178,7 +1286,11 @@ def generate_trend_chart(trend_data):
         <!-- X-axis line -->
         <line x1="{padding}" y1="{height - padding}" x2="{width - padding}" y2="{height - padding}" stroke="#333" stroke-width="2"/>
         
-        <!-- Data bars -->
+        <!-- Line paths -->
+        {malware_path}
+        {phishing_path}
+        
+        <!-- Data points -->
         {''.join(points)}
       </svg>
     </div>
@@ -1205,10 +1317,30 @@ def generate_it_report(period_label, total_events, open_events, resolved_events,
                        top_senders, malware_items, phishing_items):
     """Generate detailed IT/Technical report"""
     
-    event_type_html = "".join([
-        f"<div class='metric'><div class='metric-value'>{count}</div><div class='metric-label'>{event_type.replace('_', ' ').title()}</div></div>"
-        for event_type, count in sorted(event_type_counts.items())
-    ]) if event_type_counts else "<p>No events</p>"
+    # Generate event types HTML with boxes (all 7 types)
+    event_type_order = ['phishing', 'malware', 'breach', 'insider_threat', 'vulnerability', 'policy_violation', 'other']
+    event_type_colors = {
+        'phishing': '#d93025',
+        'malware': '#d93025',
+        'breach': '#9c27b0',
+        'insider_threat': '#f9ab00',
+        'vulnerability': '#1a73e8',
+        'policy_violation': '#f9ab00',
+        'other': '#5f6368'
+    }
+    
+    event_type_boxes = []
+    for et in event_type_order:
+        count = event_type_counts.get(et, 0)
+        display_name = et.replace('_', ' ').title()
+        color = event_type_colors.get(et, '#5f6368')
+        event_type_boxes.append(f"""
+        <div style="background-color: #f8f9fa; padding: 1rem; border-radius: 6px; border-left: 4px solid {color}; text-align: center;">
+            <div style="font-size: 1.5rem; font-weight: bold; color: {color};">{count}</div>
+            <div style="font-size: 0.875rem; color: #1d1d1d;">{display_name}</div>
+        </div>""")
+    
+    event_type_html = "".join(event_type_boxes)
     
     malware_html = "".join([
         f"<tr><td>{family}</td><td style='text-align: center;'>{count}</td></tr>"
@@ -1271,7 +1403,7 @@ def generate_it_report(period_label, total_events, open_events, resolved_events,
         </div>
     
     <h2>Incident Types</h2>
-    <div style="display: flex; flex-wrap: wrap; gap: 1.5rem; margin: 1.5rem 0;">
+    <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 1rem; margin: 1.5rem 0;">
       {event_type_html}
     </div>
     
@@ -1316,8 +1448,34 @@ def generate_it_report(period_label, total_events, open_events, resolved_events,
     """
 
 
-def generate_users_report(period_label, total_events, resolved_events, critical_events, high_events, total_phishing, security_email):
+def generate_users_report(period_label, total_events, resolved_events, event_type_counts, total_phishing, total_malware, security_email):
     """Generate user-facing awareness report"""
+    
+    # Generate event types HTML with boxes (only non-zero types)
+    event_type_order = ['phishing', 'malware', 'breach', 'insider_threat', 'vulnerability', 'policy_violation', 'other']
+    event_type_colors = {
+        'phishing': '#d93025',
+        'malware': '#d93025',
+        'breach': '#9c27b0',
+        'insider_threat': '#f9ab00',
+        'vulnerability': '#1a73e8',
+        'policy_violation': '#f9ab00',
+        'other': '#5f6368'
+    }
+    
+    event_type_boxes = []
+    for et in event_type_order:
+        count = event_type_counts.get(et, 0)
+        if count > 0:  # Only show boxes with values
+            display_name = et.replace('_', ' ').title()
+            color = event_type_colors.get(et, '#5f6368')
+            event_type_boxes.append(f"""
+                <div style="background-color: #f8f9fa; padding: 1rem; border-radius: 6px; border-left: 4px solid {color}; text-align: center;">
+                    <div style="font-size: 1.5rem; font-weight: bold; color: {color};">{count}</div>
+                    <div style="font-size: 0.875rem; color: #1d1d1d;">{display_name}</div>
+                </div>""")
+    
+    event_type_html = "".join(event_type_boxes) if event_type_boxes else "<p style='text-align: center; color: #999;'>No security events detected</p>"
     
     return f"""
     <div class="report-header">
@@ -1330,18 +1488,25 @@ def generate_users_report(period_label, total_events, resolved_events, critical_
     <p>This report highlights security threats and incidents detected in our organization during {period_label}. Your awareness and action are critical to our defense.</p>
     
     <h2>Key Threats Detected</h2>
-        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 2rem; margin: 2rem 0;">
-            <div style="background-color: #fce4e4; padding: 1.5rem; border-radius: 6px; border-left: 4px solid #d93025; color: #1f2937;">
-                <h3 style="color: #d93025; margin-top: 0;">Phishing Attempts</h3>
-                <p style="font-size: 2rem; font-weight: bold; color: #d93025; margin: 0.5rem 0;">{total_phishing}</p>
-                <p style="color: #1f2937;">Suspicious emails detected and blocked during {period_label}.</p>
-            </div>
-            <div style="background-color: #fef3c7; padding: 1.5rem; border-radius: 6px; border-left: 4px solid #f9ab00; color: #1f2937;">
-                <h3 style="color: #f9ab00; margin-top: 0;">Critical Alerts</h3>
-                <p style="font-size: 2rem; font-weight: bold; color: #f9ab00; margin: 0.5rem 0;">{critical_events + high_events}</p>
-                <p style="color: #1f2937;">High-priority security incidents requiring immediate attention.</p>
-            </div>
+    <div style="display: grid; grid-template-columns: 1fr; gap: 2rem; margin: 2rem 0;">
+        <div style="background-color: #fce4e4; padding: 1.5rem; border-radius: 6px; border-left: 4px solid #d93025; color: #1f2937;">
+            <h3 style="color: #d93025; margin-top: 0;">Total Phishing Attempts</h3>
+            <p style="font-size: 2rem; font-weight: bold; color: #d93025; margin: 0.5rem 0;">{total_phishing}</p>
+            <p style="color: #1f2937;">Suspicious emails detected and blocked during {period_label}.</p>
         </div>
+        <div style="background-color: #f3e5f5; padding: 1.5rem; border-radius: 6px; border-left: 4px solid #9c27b0; color: #1f2937;">
+            <h3 style="color: #9c27b0; margin-top: 0;">Total Malware Received</h3>
+            <p style="font-size: 2rem; font-weight: bold; color: #9c27b0; margin: 0.5rem 0;">{total_malware}</p>
+            <p style="color: #1f2937;">Malware instances detected and quarantined during {period_label}.</p>
+        </div>
+        <div style="background-color: #f0f4f9; padding: 1.5rem; border-radius: 6px;">
+            <h3 style="color: #1a73e8; margin-top: 0;">Security Events</h3>
+            <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 1rem; margin-top: 1rem;">
+                {event_type_html}
+            </div>
+            <p style="color: #1f2937; margin-top: 1rem; margin-bottom: 0;">Security events are recorded incidents tracked by our security team, including breaches, insider threats, vulnerabilities, and policy violations.</p>
+        </div>
+    </div>
     
     <h2>What You Should Do</h2>
         <div style="margin: 2rem 0;">
@@ -1752,10 +1917,11 @@ async def update_malware(
                     pass
         
         session.commit()
+        redirect_url = f"/events/{redirect_event_id}" if redirect_event_id else f"/malware/{id}"
         session.close()
-        return RedirectResponse(url=f"/events/{redirect_event_id}", status_code=303)
+        return RedirectResponse(url=redirect_url, status_code=303)
     session.close()
-    return RedirectResponse(url="/events", status_code=303)
+    return RedirectResponse(url="/malware", status_code=303)
 
 
 @app.post("/malware/{id}/delete")
@@ -1766,8 +1932,11 @@ async def delete_malware(id: int):
         event_id = malware.event_id
         session.delete(malware)
         session.commit()
-        return RedirectResponse(url=f"/events/{event_id}", status_code=303)
-    return RedirectResponse(url="/events", status_code=303)
+        redirect_url = f"/events/{event_id}" if event_id else "/malware"
+        session.close()
+        return RedirectResponse(url=redirect_url, status_code=303)
+    session.close()
+    return RedirectResponse(url="/malware", status_code=303)
 
 
 # Phishing CRUD (linked to events)

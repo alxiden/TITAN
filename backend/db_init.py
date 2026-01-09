@@ -28,7 +28,7 @@ DEFAULT_MALWARE_FAMILIES = [
 ]
 from sqlalchemy import text
 
-DEFAULT_DB_PATH = Path(os.environ.get("TITAN_DB_PATH", "./TITAN-data/titan.sqlite")).resolve()
+DEFAULT_DB_PATH = Path(os.environ.get("TITAN_DB_PATH", r"C:\Users\dward\OneDrive - Kings Court Trust Ltd\Documents\GitHub\TITAN-data\titan.sqlite")).resolve()
 
 
 def get_database_url(path: Path = DEFAULT_DB_PATH) -> str:
