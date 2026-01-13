@@ -26,6 +26,24 @@ DEFAULT_MALWARE_FAMILIES = [
     "Lokibot",
     "Raccoon Stealer",
 ]
+
+DEFAULT_MALWARE_CATEGORIES = [
+    "Ransomware",
+    "Trojan",
+    "Worm",
+    "Rootkit",
+    "Backdoor",
+    "Spyware",
+    "Adware",
+    "Keylogger",
+    "Botnet",
+    "RAT (Remote Access Trojan)",
+    "Stealer",
+    "Cryptominer",
+    "Downloader",
+    "Dropper",
+    "Exploit Kit",
+]
 from sqlalchemy import text
 
 DEFAULT_DB_PATH = Path(os.environ.get("TITAN_DB_PATH", "./TITAN-data/titan.sqlite")).resolve()
@@ -60,6 +78,12 @@ def ensure_schema(engine):
         if "family_id" not in m_col_names:
             conn.execute(text("ALTER TABLE malware ADD COLUMN family_id INTEGER"))
             conn.commit()
+        if "category" not in m_col_names:
+            conn.execute(text("ALTER TABLE malware ADD COLUMN category VARCHAR(128)"))
+            conn.commit()
+        if "category_id" not in m_col_names:
+            conn.execute(text("ALTER TABLE malware ADD COLUMN category_id INTEGER"))
+            conn.commit()
 
         # Check phishing table columns
         p_cols = conn.execute(text("PRAGMA table_info(phishing)")).fetchall()
@@ -78,6 +102,19 @@ def ensure_schema(engine):
                 conn.execute(
                     text("INSERT OR IGNORE INTO malware_families (name, created_at) VALUES (:name, CURRENT_TIMESTAMP)"),
                     [{"name": n} for n in to_insert],
+                )
+                conn.commit()
+        
+        # Seed default malware categories if table exists and is empty
+        cat_cols = conn.execute(text("PRAGMA table_info(malware_categories)")).fetchall()
+        if cat_cols:
+            existing_cats = conn.execute(text("SELECT name FROM malware_categories")).fetchall()
+            existing_cats_lower = {row[0].strip().lower() for row in existing_cats if row[0]}
+            to_insert_cats = [name for name in DEFAULT_MALWARE_CATEGORIES if name.strip().lower() not in existing_cats_lower]
+            if to_insert_cats:
+                conn.execute(
+                    text("INSERT OR IGNORE INTO malware_categories (name, created_at) VALUES (:name, CURRENT_TIMESTAMP)"),
+                    [{"name": n} for n in to_insert_cats],
                 )
                 conn.commit()
 

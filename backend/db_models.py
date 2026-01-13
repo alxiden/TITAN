@@ -104,6 +104,8 @@ class Malware(Base):
     name = Column(String(128), nullable=False)
     family = Column(String(128), nullable=True)
     family_id = Column(Integer, ForeignKey("malware_families.id"), nullable=True)
+    category = Column(String(128), nullable=True)
+    category_id = Column(Integer, ForeignKey("malware_categories.id"), nullable=True)
     description = Column(Text, nullable=True)
     occurrence_date = Column(DateTime, nullable=True)
     event_id = Column(Integer, ForeignKey("events.id"), nullable=True)
@@ -114,6 +116,7 @@ class Malware(Base):
     event = relationship("Event", back_populates="malware_instances")
     iocs = relationship("IOC", back_populates="malware", cascade="all, delete-orphan")
     family_ref = relationship("MalwareFamily", back_populates="malware_items")
+    category_ref = relationship("MalwareCategory", back_populates="malware_items")
 
 
 class Phish(Base):
@@ -180,3 +183,14 @@ class MalwareFamily(Base):
 
     # Relationships
     malware_items = relationship("Malware", back_populates="family_ref")
+
+
+class MalwareCategory(Base):
+    """Reference table for malware categories"""
+    __tablename__ = "malware_categories"
+    id = Column(Integer, primary_key=True)
+    name = Column(String(128), nullable=False, unique=True)
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+
+    # Relationships
+    malware_items = relationship("Malware", back_populates="category_ref")

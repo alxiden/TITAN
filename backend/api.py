@@ -7,7 +7,7 @@ import csv
 import json
 from sqlalchemy import func, or_
 from .db_init import get_session, DEFAULT_DB_PATH
-from .db_models import Event, Malware, MalwareFamily, Phish, IOC, Mitigation, APT, EventStatus, EventType
+from .db_models import Event, Malware, MalwareFamily, MalwareCategory, Phish, IOC, Mitigation, APT, EventStatus, EventType
 from jinja2 import Environment, FileSystemLoader, select_autoescape
 from datetime import datetime
 from typing import Optional, List
@@ -259,6 +259,46 @@ def get_or_create_family(session, name: Optional[str]) -> Optional[MalwareFamily
     session.add(fam)
     session.flush()  # assign id without full commit
     return fam
+
+
+def get_or_create_category(session, name: Optional[str]) -> Optional[MalwareCategory]:
+    """Return an existing MalwareCategory (case-insensitive) or create it."""
+    if not name:
+        return None
+    normalized = name.strip()
+    if not normalized:
+        return None
+    existing = (
+        session.query(MalwareCategory)
+        .filter(MalwareCategory.name.ilike(normalized))
+        .first()
+    )
+    if existing:
+        return existing
+    cat = MalwareCategory(name=normalized)
+    session.add(cat)
+    session.flush()  # assign id without full commit
+    return cat
+
+
+def get_or_create_category(session, name: Optional[str]) -> Optional[MalwareCategory]:
+    """Return an existing MalwareCategory (case-insensitive) or create it."""
+    if not name:
+        return None
+    normalized = name.strip()
+    if not normalized:
+        return None
+    existing = (
+        session.query(MalwareCategory)
+        .filter(MalwareCategory.name.ilike(normalized))
+        .first()
+    )
+    if existing:
+        return existing
+    cat = MalwareCategory(name=normalized)
+    session.add(cat)
+    session.flush()  # assign id without full commit
+    return cat
 
 
 @app.get("/", response_class=HTMLResponse)
@@ -857,6 +897,13 @@ async def generate_report(audience: str, period_type: str, period: str):
         malware_families[family_name] = malware_families.get(family_name, 0) + 1
     top_malware = sorted(malware_families.items(), key=lambda x: x[1], reverse=True)[:5]
     
+    # Get top malware categories
+    malware_categories = {}
+    for m in malware_items:
+        category_name = (m.category_ref.name if m.category_ref else (m.category or 'Unknown')).strip()
+        malware_categories[category_name] = malware_categories.get(category_name, 0) + 1
+    top_categories = sorted(malware_categories.items(), key=lambda x: x[1], reverse=True)[:5]
+    
     # Get top phishing senders
     phishing_senders = {}
     for p in phishing_items:
@@ -901,6 +948,21 @@ async def generate_report(audience: str, period_type: str, period: str):
     
     top_apts = sorted(apt_associations.items(), key=lambda x: x[1], reverse=True)[:5]
     
+    # Calculate average days to resolution for events closed in this period
+    closed_in_period = [e for e in events if e.closed_date and in_window(e.closed_date)]
+    avg_days_to_resolution = None
+    if closed_in_period:
+        total_days = 0
+        for event in closed_in_period:
+            # Use detected_date as the start (when the event was opened)
+            start_date = event.detected_date
+            end_date = event.closed_date
+            if start_date and end_date:
+                days_diff = (end_date - start_date).days
+                # If closed same day, count as 1 day
+                total_days += max(1, days_diff)
+        avg_days_to_resolution = round(total_days / len(closed_in_period), 1) if closed_in_period else None
+    
     security_email = load_security_email()
     
     # Generate HTML report based on audience
@@ -908,7 +970,7 @@ async def generate_report(audience: str, period_type: str, period: str):
         html = generate_executive_report(period_label, period_type, total_events, open_events, resolved_events, 
                                          critical_events, high_events, total_malware, malware_linked_to_events,
                                          total_phishing, phishing_linked_to_events, severity_counts, event_type_counts, top_malware, top_senders,
-                                         daily_malware, daily_phishing, top_targets, top_apts)
+                                         daily_malware, daily_phishing, top_targets, top_apts, avg_days_to_resolution, top_categories)
     elif audience == "it":
         html = generate_it_report(period_label, total_events, open_events, resolved_events, in_progress_events,
                                   critical_events, high_events, medium_events, low_events,
@@ -924,7 +986,7 @@ async def generate_report(audience: str, period_type: str, period: str):
 def generate_executive_report(period_label, period_type, total_events, open_events, resolved_events, critical_events,
                               high_events, total_malware, malware_linked_to_events, total_phishing, phishing_linked_to_events,
                               severity_counts, event_type_counts, top_malware, top_senders, daily_malware, daily_phishing, 
-                              top_targets, top_apts):
+                              top_targets, top_apts, avg_days_to_resolution=None, top_categories=None):
     """Generate executive summary report"""
     
     # Generate trend visualization data only for quarter and year reports
@@ -988,6 +1050,13 @@ def generate_executive_report(period_label, period_type, total_events, open_even
         for sender, count in top_senders
     ]) if top_senders else "<tr><td colspan='2' style='text-align: center;'>No phishing detected</td></tr>"
     
+    # Generate top categories HTML if data is available
+    top_categories = top_categories or []
+    categories_html = "".join([
+        f"<tr><td>{category}</td><td style='text-align: center;'>{count}</td></tr>"
+        for category, count in top_categories
+    ]) if top_categories else "<tr><td colspan='2' style='text-align: center;'>No malware detected</td></tr>"
+    
     targets_html = "".join([
         f"<tr><td>{target}</td><td style='text-align: center;'>{count}</td></tr>"
         for target, count in top_targets
@@ -1041,6 +1110,10 @@ def generate_executive_report(period_label, period_type, total_events, open_even
         <div class="metric-value" style="color: #1e8e3e;">{resolved_events}</div>
         <div class="metric-label">Resolved Events</div>
       </div>
+      {f'''<div class="metric">
+        <div class="metric-value" style="color: #1a73e8;">{avg_days_to_resolution}</div>
+        <div class="metric-label">Avg Days to Resolution</div>
+      </div>''' if avg_days_to_resolution is not None else ''}
     </div>
     
     {trend_section}
@@ -1063,7 +1136,7 @@ def generate_executive_report(period_label, period_type, total_events, open_even
         <div style="background-color: #f3e5f5; padding: 1.5rem; border-radius: 6px; border-left: 4px solid #9c27b0;">
           <h3 style="margin-top: 0; color: #9c27b0;">Attack Vectors</h3>
           <div style="margin: 1rem 0;">
-            <p style="font-size: 1.25rem; margin: 0 0 0.75rem 0; font-weight: bold; color: #9c27b0;">Malware Incidents: <span style="color: #d93025;">{total_malware}</span></p>
+            <p style="font-size: 1.25rem; margin: 0 0 0.75rem 0; font-weight: bold; color: #9c27b0;">Malware Detected: <span style="color: #d93025;">{total_malware}</span></p>
             <div style="display: flex; gap: 1rem;">
               <div style="flex: 1; background-color: #fff; padding: 0.75rem; border-radius: 4px; border: 1px solid #d0d7de;">
                 <div style="font-size: 0.875rem; color: #5f6368; margin-bottom: 0.25rem;">Linked to Events</div>
@@ -1115,7 +1188,7 @@ def generate_executive_report(period_label, period_type, total_events, open_even
     </div>
     
     <h2>Top Threats</h2>
-    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 2rem; margin: 1.5rem 0;">
+    <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 2rem; margin: 1.5rem 0;">
       <div>
         <h3 style="margin-top: 0;">Top Malware Families</h3>
         <table>
@@ -1124,6 +1197,17 @@ def generate_executive_report(period_label, period_type, total_events, open_even
           </thead>
           <tbody>
             {malware_html}
+          </tbody>
+        </table>
+      </div>
+      <div>
+        <h3 style="margin-top: 0;">Top Malware Types</h3>
+        <table>
+          <thead>
+            <tr><th>Type</th><th style="text-align: center;">Count</th></tr>
+          </thead>
+          <tbody>
+            {categories_html}
           </tbody>
         </table>
       </div>
@@ -1797,6 +1881,7 @@ async def new_malware_form(request: Request, event_id: int):
         session.close()
         return "Event not found", 404
     families = session.query(MalwareFamily).order_by(MalwareFamily.name.asc()).all()
+    categories = session.query(MalwareCategory).order_by(MalwareCategory.name.asc()).all()
     apts = session.query(APT).order_by(APT.name).all()
     template = env.get_template("malware/form.html")
     result = template.render(
@@ -1804,6 +1889,7 @@ async def new_malware_form(request: Request, event_id: int):
         malware=None,
         event=event,
         families=families,
+        categories=categories,
         apts=apts,
         action=f"/events/{event_id}/malware/new",
     )
@@ -1816,6 +1902,7 @@ async def create_malware(
     event_id: int,
     name: str = Form(...),
     family: Optional[str] = Form(None),
+    category: Optional[str] = Form(None),
     description: Optional[str] = Form(None),
     occurrence_date: Optional[str] = Form(None),
     apt_ids: list = Form(None),
@@ -1828,10 +1915,13 @@ async def create_malware(
         except ValueError:
             pass
     family_ref = get_or_create_family(session, family)
+    category_ref = get_or_create_category(session, category)
     malware = Malware(
         name=name,
         family=family_ref.name if family_ref else None,
         family_id=family_ref.id if family_ref else None,
+        category=category_ref.name if category_ref else None,
+        category_id=category_ref.id if category_ref else None,
         description=description,
         occurrence_date=parsed_date,
         event_id=event_id,
@@ -1863,6 +1953,7 @@ async def edit_malware_form(request: Request, id: int):
         session.close()
         return "Not found", 404
     families = session.query(MalwareFamily).order_by(MalwareFamily.name.asc()).all()
+    categories = session.query(MalwareCategory).order_by(MalwareCategory.name.asc()).all()
     apts = session.query(APT).order_by(APT.name).all()
     template = env.get_template("malware/form.html")
     result = template.render(
@@ -1870,6 +1961,7 @@ async def edit_malware_form(request: Request, id: int):
         malware=malware,
         event=malware.event,
         families=families,
+        categories=categories,
         apts=apts,
         action=f"/malware/{id}/edit",
     )
@@ -1882,6 +1974,7 @@ async def update_malware(
     id: int,
     name: str = Form(...),
     family: Optional[str] = Form(None),
+    category: Optional[str] = Form(None),
     description: Optional[str] = Form(None),
     occurrence_date: Optional[str] = Form(None),
     apt_ids: list = Form(None),
@@ -1897,9 +1990,12 @@ async def update_malware(
             except ValueError:
                 pass
         family_ref = get_or_create_family(session, family)
+        category_ref = get_or_create_category(session, category)
         malware.name = name
         malware.family = family_ref.name if family_ref else None
         malware.family_id = family_ref.id if family_ref else None
+        malware.category = category_ref.name if category_ref else None
+        malware.category_id = category_ref.id if category_ref else None
         malware.description = description
         malware.occurrence_date = parsed_date
         
@@ -2301,6 +2397,7 @@ async def new_standalone_malware_form(request: Request):
         .all()
     )
     families = session.query(MalwareFamily).order_by(MalwareFamily.name.asc()).all()
+    categories = session.query(MalwareCategory).order_by(MalwareCategory.name.asc()).all()
     apts = session.query(APT).order_by(APT.name).all()
     template = env.get_template("malware/standalone_form.html")
     result = template.render(
@@ -2308,6 +2405,7 @@ async def new_standalone_malware_form(request: Request):
         malware=None,
         events=events,
         families=families,
+        categories=categories,
         apts=apts,
         action="/malware/new",
     )
@@ -2319,6 +2417,7 @@ async def new_standalone_malware_form(request: Request):
 async def create_standalone_malware(
     name: str = Form(...),
     family: Optional[str] = Form(None),
+    category: Optional[str] = Form(None),
     description: Optional[str] = Form(None),
     occurrence_date: Optional[str] = Form(None),
     event_id: Optional[int] = Form(None),
@@ -2332,10 +2431,13 @@ async def create_standalone_malware(
         except ValueError:
             pass
     family_ref = get_or_create_family(session, family)
+    category_ref = get_or_create_category(session, category)
     malware = Malware(
         name=name,
         family=family_ref.name if family_ref else None,
         family_id=family_ref.id if family_ref else None,
+        category=category_ref.name if category_ref else None,
+        category_id=category_ref.id if category_ref else None,
         description=description,
         occurrence_date=parsed_date,
         event_id=event_id if event_id else None,
@@ -2558,10 +2660,11 @@ async def settings_page(request: Request):
     }
 
     families = session.query(MalwareFamily).order_by(MalwareFamily.name.asc()).all()
+    categories = session.query(MalwareCategory).order_by(MalwareCategory.name.asc()).all()
     security_email = load_security_email()
     
     template = env.get_template("settings.html")
-    return template.render(request=request, stats=stats, db_info=db_info, families=families, security_email=security_email)
+    return template.render(request=request, stats=stats, db_info=db_info, families=families, categories=categories, security_email=security_email)
 
 
 @app.post("/settings/clear-data")
@@ -2596,6 +2699,28 @@ async def add_malware_family(name: str = Form(...)):
     session.commit()
     return RedirectResponse(
         url=f"/settings?family_added={fam.id if fam else ''}", status_code=303
+    )
+
+
+@app.post("/settings/malware-category")
+async def add_malware_category(name: str = Form(...)):
+    """Add a new malware category to the reference table."""
+    session = get_session(DEFAULT_DB_PATH)
+    cat = get_or_create_category(session, name)
+    session.commit()
+    return RedirectResponse(
+        url=f"/settings?category_added={cat.id if cat else ''}", status_code=303
+    )
+
+
+@app.post("/settings/malware-category")
+async def add_malware_category(name: str = Form(...)):
+    """Add a new malware category to the reference table."""
+    session = get_session(DEFAULT_DB_PATH)
+    cat = get_or_create_category(session, name)
+    session.commit()
+    return RedirectResponse(
+        url=f"/settings?category_added={cat.id if cat else ''}", status_code=303
     )
 
 
@@ -2715,6 +2840,7 @@ async def import_malware_csv(file: UploadFile = File(...)):
     Expected columns (header names, case-insensitive):
     - name (required)
     - family (optional)
+    - category (optional)
     - description (optional)
     - occurrence_date (YYYY-MM-DD, optional)
     - event_id (optional, will link if exists)
@@ -2738,10 +2864,12 @@ async def import_malware_csv(file: UploadFile = File(...)):
             continue
 
         family = (row.get("family") or "").strip() or None
+        category = (row.get("category") or "").strip() or None
         description = (row.get("description") or "").strip() or None
         occ = parse_date(row.get("occurrence_date") or row.get("date"))
 
         family_ref = get_or_create_family(session, family)
+        category_ref = get_or_create_category(session, category)
 
         event_id = None
         raw_eid = row.get("event_id") or row.get("event")
@@ -2755,6 +2883,8 @@ async def import_malware_csv(file: UploadFile = File(...)):
             name=name,
             family=family_ref.name if family_ref else None,
             family_id=family_ref.id if family_ref else None,
+            category=category_ref.name if category_ref else None,
+            category_id=category_ref.id if category_ref else None,
             description=description,
             occurrence_date=occ,
             event_id=event_id,

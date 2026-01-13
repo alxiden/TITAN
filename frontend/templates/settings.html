@@ -109,6 +109,11 @@
       ✓ Malware family added.
     </div>
     {% endif %}
+    {% if request.query_params.get('category_added') is not none %}
+    <div class="success-message">
+      ✓ Malware category added.
+    </div>
+    {% endif %}
     {% if request.query_params.get('security_email_updated') == 'true' %}
     <div class="success-message">
       ✓ Security contact email updated.
@@ -198,8 +203,8 @@
             <button type="submit" class="btn btn-primary">Import Malware CSV</button>
           </form>
           <p class="muted" style="margin-top:0.75rem; font-size:0.9rem;">
-            Columns: <code>name</code> (req), <code>family</code>, <code>description</code>, <code>occurrence_date</code>, <code>event_id</code><br>
-            Example: <code>Emotet,Emotet,"Banking trojan",2025-12-10,12</code>
+            Columns: <code>name</code> (req), <code>family</code>, <code>category</code>, <code>description</code>, <code>occurrence_date</code>, <code>event_id</code><br>
+            Example: <code>Emotet,Emotet,Trojan,"Banking trojan",2025-12-10,12</code>
           </p>
         </div>
         <div class="stat-item" style="border: 1px dashed #222431;">
@@ -240,6 +245,31 @@
           <input type="text" name="name" id="family_name" placeholder="e.g., Emotet" required>
         </div>
         <button type="submit" class="btn btn-primary">Add Family</button>
+      </form>
+    </div>
+
+    <!-- Malware Categories -->
+    <div class="settings-section">
+      <h3>🏷️ Malware Categories</h3>
+      <p class="muted" style="margin-bottom: 1rem;">Manage the dropdown options for malware categories. These are used across malware forms.</p>
+      <div class="stat-grid" style="grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));">
+        {% for cat in categories %}
+        <div class="stat-item">
+          <div class="stat-label">Category</div>
+          <div class="stat-value" style="font-size:1.1rem;">{{ cat.name }}</div>
+          <div class="muted" style="font-size:0.8rem;">ID: {{ cat.id }}</div>
+        </div>
+        {% endfor %}
+        {% if categories|length == 0 %}
+        <p class="muted" style="grid-column: 1 / -1;">No categories yet. Add one below.</p>
+        {% endif %}
+      </div>
+      <form method="post" action="/settings/malware-category" class="form" style="margin-top:1rem;">
+        <div class="form-group">
+          <label for="category_name">Add a new category</label>
+          <input type="text" name="name" id="category_name" placeholder="e.g., Ransomware" required>
+        </div>
+        <button type="submit" class="btn btn-primary">Add Category</button>
       </form>
     </div>
 
