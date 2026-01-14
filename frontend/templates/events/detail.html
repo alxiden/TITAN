@@ -203,6 +203,53 @@
       <p class="muted">No mitigations yet. <a href="/events/{{ event.id }}/mitigation/new/form">Add one</a>.</p>
       {% endif %}
     </div>
+
+    <!-- Vulnerabilities Section -->
+    <div class="content-section">
+      <div class="toolbar">
+        <h3>Vulnerabilities ({{ event.vulnerability_instances|length }})</h3>
+        <a href="/events/{{ event.id }}/vulnerability/new/form" class="btn-small btn-primary">+ Add Vulnerability</a>
+      </div>
+      {% if event.vulnerability_instances %}
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th>CVE</th>
+            <th>Title</th>
+            <th>Severity</th>
+            <th>CVSS</th>
+            <th>Product</th>
+            <th>Patch</th>
+            <th>Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for vuln in event.vulnerability_instances %}
+          <tr>
+            <td>{{ vuln.cve_id or '—' }}</td>
+            <td><strong>{{ vuln.title }}</strong></td>
+            <td>
+              {% if vuln.severity %}
+              <span class="badge badge-{{ vuln.severity }}">{{ vuln.severity|upper }}</span>
+              {% else %}—{% endif %}
+            </td>
+            <td>{{ vuln.cvss_score or '—' }}</td>
+            <td>{{ vuln.affected_product or '—' }}</td>
+            <td>{% if vuln.patch_available %}✓{% else %}✗{% endif %}</td>
+            <td class="actions">
+              <a href="/vulnerabilities/{{ vuln.id }}/edit" class="btn-small">Edit</a>
+              <form method="post" action="/vulnerabilities/{{ vuln.id }}/delete" style="display:inline">
+                <button type="submit" class="btn-small btn-danger" onclick="return confirm('Delete?')">Del</button>
+              </form>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      {% else %}
+      <p class="muted">No vulnerabilities linked. <a href="/events/{{ event.id }}/vulnerability/new/form">Add one</a>.</p>
+      {% endif %}
+    </div>
   </main>
 
   <footer>

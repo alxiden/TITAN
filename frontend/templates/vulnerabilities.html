@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Vulnerabilities — TITAN</title>
+  <link rel="stylesheet" href="/static/styles.css">
+</head>
+<body>
+  <header>
+    <h1><a href="/">TITAN</a> / Vulnerabilities</h1>
+  </header>
+
+  <main>
+    <div class="toolbar">
+      <h2>Vulnerabilities ({{ items|length }})</h2>
+      <a href="/vulnerabilities/new/form" class="btn btn-primary">+ Add Vulnerability</a>
+    </div>
+
+    <div class="form-group" style="max-width:420px; margin:0 0 1rem 0;">
+      <label for="vuln-search" class="muted">Search vulnerabilities</label>
+      <input type="text" id="vuln-search" placeholder="Type to filter by any column">
+    </div>
+
+    {% if items %}
+    <table class="data-table">
+      <thead>
+        <tr>
+          <th>CVE</th>
+          <th>Title</th>
+          <th>Severity</th>
+          <th>CVSS</th>
+          <th>Product</th>
+          <th>Version</th>
+          <th>Patch</th>
+          <th>Event</th>
+          <th>Discovered</th>
+          <th>Patched</th>
+          <th>Actions</th>
+        </tr>
+      </thead>
+      <tbody id="vuln-tbody">
+        {% for v in items %}
+        <tr>
+          <td>{{ v.cve_id or '—' }}</td>
+          <td><strong>{{ v.title }}</strong></td>
+          <td>
+            {% if v.severity %}
+            <span class="badge badge-{{ v.severity }}">{{ v.severity|upper }}</span>
+            {% else %}
+            —
+            {% endif %}
+          </td>
+          <td>{{ v.cvss_score or '—' }}</td>
+          <td>{{ v.affected_product or '—' }}</td>
+          <td>{{ v.affected_version or '—' }}</td>
+          <td>{% if v.patch_available %}✓{% else %}✗{% endif %}</td>
+          <td>
+            {% if v.event_id %}
+              <a href="/events/{{ v.event_id }}">Event #{{ v.event_id }}</a>
+            {% else %}—{% endif %}
+          </td>
+          <td>{{ (v.discovered_date.strftime('%Y-%m-%d') if v.discovered_date) or '—' }}</td>
+          <td>{{ (v.patched_date.strftime('%Y-%m-%d') if v.patched_date) or '—' }}</td>
+          <td class="actions">
+            <a href="/vulnerabilities/{{ v.id }}/edit" class="btn-small">Edit</a>
+            <form method="post" action="/vulnerabilities/{{ v.id }}/delete" style="display:inline;">
+              <button type="submit" class="btn-small btn-danger" onclick="return confirm('Delete this vulnerability?')">Delete</button>
+            </form>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+    <p class="muted">No vulnerabilities yet. <a href="/vulnerabilities/new/form">Add one</a>.</p>
+    {% endif %}
+  </main>
+
+  <footer>
+    <p class="muted"><a href="/">← Home</a></p>
+  </footer>
+
+  <script>
+    // Search functionality
+    (function(){
+      const input = document.getElementById('vuln-search');
+      const tbody = document.getElementById('vuln-tbody');
+      if(!input || !tbody) return;
+      input.addEventListener('input', function(){
+        const q = this.value.trim().toLowerCase();
+        for (const row of tbody.rows) {
+          const text = row.innerText.toLowerCase();
+          row.style.display = text.includes(q) ? '' : 'none';
+        }
+      });
+    })();
+  </script>
+</body>
+</html>

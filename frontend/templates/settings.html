@@ -102,6 +102,10 @@
       {% if request.query_params.get('phish_imported') %}
         ✓ Imported {{ request.query_params.get('phish_imported') }} phishing rows ({{ request.query_params.get('phish_failed', '0') }} skipped).
       {% endif %}
+      {% if request.query_params.get('vuln_imported') %}<br>{% endif %}
+      {% if request.query_params.get('vuln_imported') %}
+        ✓ Imported {{ request.query_params.get('vuln_imported') }} vulnerability rows ({{ request.query_params.get('vuln_failed', '0') }} skipped).
+      {% endif %}
     </div>
     {% endif %}
     {% if request.query_params.get('family_added') is not none %}
@@ -143,6 +147,10 @@
         <div class="stat-item">
           <div class="stat-label">Mitigations</div>
           <div class="stat-value">{{ stats.mitigations }}</div>
+        </div>
+        <div class="stat-item">
+          <div class="stat-label">Vulnerabilities</div>
+          <div class="stat-value">{{ stats.vulnerabilities }}</div>
         </div>
       </div>
     </div>
@@ -189,38 +197,64 @@
       </form>
     </div>
 
-    <!-- Imports -->
+    <!-- Malware CSV Import -->
     <div class="settings-section">
-      <h3>⬆️ CSV Import</h3>
-      <p class="muted" style="margin-bottom: 1rem;">Upload CSV files to bulk-import malware and phishing records. Accepted encoding: UTF-8. Date format: YYYY-MM-DD.</p>
-      <div class="stat-grid" style="grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));">
-        <div class="stat-item" style="border: 1px dashed #222431;">
-          <h4 style="margin-top:0; color:#e8e9ed;">Malware CSV</h4>
-          <form method="post" action="/settings/import/malware-csv" enctype="multipart/form-data">
-            <div class="form-group" style="margin-bottom:0.75rem;">
-              <input type="file" name="file" accept=".csv" required>
-            </div>
-            <button type="submit" class="btn btn-primary">Import Malware CSV</button>
-          </form>
-          <p class="muted" style="margin-top:0.75rem; font-size:0.9rem;">
-            Columns: <code>name</code> (req), <code>family</code>, <code>category</code>, <code>description</code>, <code>occurrence_date</code>, <code>event_id</code><br>
-            Example: <code>Emotet,Emotet,Trojan,"Banking trojan",2025-12-10,12</code>
-          </p>
-        </div>
-        <div class="stat-item" style="border: 1px dashed #222431;">
-          <h4 style="margin-top:0; color:#e8e9ed;">Phishing CSV</h4>
-          <form method="post" action="/settings/import/phish-csv" enctype="multipart/form-data">
-            <div class="form-group" style="margin-bottom:0.75rem;">
-              <input type="file" name="file" accept=".csv" required>
-            </div>
-            <button type="submit" class="btn btn-primary">Import Phishing CSV</button>
-          </form>
-          <p class="muted" style="margin-top:0.75rem; font-size:0.9rem;">
-            Columns: <code>subject</code> (req), <code>sender</code>, <code>target</code>, <code>description</code>, <code>risk_level</code>, <code>occurrence_date</code>, <code>event_id</code><br>
-            Example: <code>Invoice required,accounts@bad.com,finance@company.com,"Payment request",high,2025-12-10,12</code>
-          </p>
-        </div>
+      <h3>⬆️ Malware CSV Import</h3>
+      <p class="muted" style="margin-bottom: 1rem;">Upload a CSV file to bulk-import malware records. Accepted encoding: UTF-8. Date format: YYYY-MM-DD.</p>
+      <div style="margin-bottom:0.75rem;">
+        <a href="/settings/download/malware-template" class="btn btn-secondary" style="display:inline-block; text-decoration:none;">📥 Download Template</a>
       </div>
+      <form method="post" action="/settings/import/malware-csv" enctype="multipart/form-data" style="max-width: 420px;">
+        <div class="form-group">
+          <label>CSV File</label>
+          <input type="file" name="file" accept=".csv" required>
+        </div>
+        <button type="submit" class="btn btn-primary">Import Malware CSV</button>
+      </form>
+      <p class="muted" style="margin-top:1rem; font-size:0.9rem;">
+        Columns: <code>name</code> (req), <code>family</code>, <code>category</code>, <code>description</code>, <code>occurrence_date</code>, <code>event_id</code><br>
+        Example: <code>Emotet,Emotet,Trojan,"Banking trojan",2025-12-10,12</code>
+      </p>
+    </div>
+
+    <!-- Phishing CSV Import -->
+    <div class="settings-section">
+      <h3>⬆️ Phishing CSV Import</h3>
+      <p class="muted" style="margin-bottom: 1rem;">Upload a CSV file to bulk-import phishing records. Accepted encoding: UTF-8. Date format: YYYY-MM-DD.</p>
+      <div style="margin-bottom:0.75rem;">
+        <a href="/settings/download/phishing-template" class="btn btn-secondary" style="display:inline-block; text-decoration:none;">📥 Download Template</a>
+      </div>
+      <form method="post" action="/settings/import/phish-csv" enctype="multipart/form-data" style="max-width: 420px;">
+        <div class="form-group">
+          <label>CSV File</label>
+          <input type="file" name="file" accept=".csv" required>
+        </div>
+        <button type="submit" class="btn btn-primary">Import Phishing CSV</button>
+      </form>
+      <p class="muted" style="margin-top:1rem; font-size:0.9rem;">
+        Columns: <code>subject</code> (req), <code>sender</code>, <code>target</code>, <code>description</code>, <code>risk_level</code>, <code>occurrence_date</code>, <code>event_id</code><br>
+        Example: <code>Invoice required,accounts@bad.com,finance@company.com,"Payment request",high,2025-12-10,12</code>
+      </p>
+    </div>
+
+    <!-- Vulnerabilities CSV Import -->
+    <div class="settings-section">
+      <h3>⬆️ Vulnerabilities CSV Import</h3>
+      <p class="muted" style="margin-bottom: 1rem;">Upload a CSV file to bulk-import vulnerability records. Accepted encoding: UTF-8. Date format: YYYY-MM-DD.</p>
+      <div style="margin-bottom:0.75rem;">
+        <a href="/settings/download/vulnerabilities-template" class="btn btn-secondary" style="display:inline-block; text-decoration:none;">📥 Download Template</a>
+      </div>
+      <form method="post" action="/settings/import/vulnerabilities-csv" enctype="multipart/form-data" style="max-width: 420px;">
+        <div class="form-group">
+          <label>CSV File</label>
+          <input type="file" name="file" accept=".csv" required>
+        </div>
+        <button type="submit" class="btn btn-primary">Import Vulnerabilities CSV</button>
+      </form>
+      <p class="muted" style="margin-top:1rem; font-size:0.9rem;">
+        Columns: <code>title</code> (req), <code>cve_id</code>, <code>severity</code>, <code>cvss_score</code>, <code>affected_product</code>, <code>affected_version</code>, <code>description</code>, <code>patch_available</code>, <code>patch_details</code>, <code>discovered_date</code>, <code>patched_date</code>, <code>event_id</code><br>
+        Example: <code>CVE-2024-1234,"Critical RCE",critical,9.8,"Apache HTTP Server",2.4.58,"RCE vuln",yes,"Upgrade to 2.4.59",2024-01-10,2024-01-15,12</code>
+      </p>
     </div>
 
     <!-- Malware Families -->

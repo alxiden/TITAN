@@ -1,5 +1,5 @@
 from fastapi import FastAPI, Request, Form, UploadFile, File
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.responses import HTMLResponse, RedirectResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pathlib import Path
 import io
@@ -7,7 +7,7 @@ import csv
 import json
 from sqlalchemy import func, or_
 from .db_init import get_session, DEFAULT_DB_PATH
-from .db_models import Event, Malware, MalwareFamily, MalwareCategory, Phish, IOC, Mitigation, APT, EventStatus, EventType
+from .db_models import Event, Malware, MalwareFamily, MalwareCategory, Phish, IOC, Mitigation, APT, EventStatus, EventType, Vulnerability
 from jinja2 import Environment, FileSystemLoader, select_autoescape
 from datetime import datetime
 from typing import Optional, List
@@ -147,6 +147,7 @@ def db_counts(session):
         "malware": session.query(func.count(Malware.id)).scalar() or 0,
         "phishing": session.query(func.count(Phish.id)).scalar() or 0,
         "iocs": session.query(func.count(IOC.id)).scalar() or 0,
+        "vulnerabilities": session.query(func.count(Vulnerability.id)).scalar() or 0,
         "mitigations": session.query(func.count(Mitigation.id)).scalar() or 0,
         "apts": session.query(func.count(APT.id)).scalar() or 0,
         "events_open": session.query(func.count(Event.id)).filter(Event.status != EventStatus.RESOLVED).scalar() or 0,
@@ -323,6 +324,142 @@ async def homepage(request: Request):
 @app.get("/health")
 async def health():
     return {"status": "ok"}
+
+
+@app.get("/vulnerabilities", response_class=HTMLResponse)
+async def list_vulnerabilities():
+    """List all vulnerabilities in a simple table view."""
+    session = get_session(DEFAULT_DB_PATH)
+    items = session.query(Vulnerability).order_by(Vulnerability.created_at.desc()).all()
+    template = env.get_template("vulnerabilities.html")
+    return template.render(
+        title="Vulnerabilities",
+        items=items,
+        counts=db_counts(session),
+    )
+
+
+@app.post("/vulnerabilities/new")
+async def create_vulnerability(
+    cve_id: Optional[str] = Form(None),
+    title: str = Form(...),
+    description: Optional[str] = Form(None),
+    severity: Optional[str] = Form(None),
+    cvss_score: Optional[str] = Form(None),
+    affected_product: Optional[str] = Form(None),
+    affected_version: Optional[str] = Form(None),
+    patch_available: bool = Form(False),
+    patch_details: Optional[str] = Form(None),
+    discovered_date: Optional[str] = Form(None),
+    patched_date: Optional[str] = Form(None),
+    event_id: Optional[int] = Form(None),
+):
+    """Create a new vulnerability."""
+    session = get_session(DEFAULT_DB_PATH)
+    parsed_discovered = None
+    if discovered_date:
+        try:
+            parsed_discovered = datetime.strptime(discovered_date, '%Y-%m-%d')
+        except ValueError:
+            pass
+    
+    parsed_patched = None
+    if patched_date:
+        try:
+            parsed_patched = datetime.strptime(patched_date, '%Y-%m-%d')
+        except ValueError:
+            pass
+    
+    vuln = Vulnerability(
+        cve_id=cve_id.strip() if cve_id else None,
+        title=title.strip(),
+        description=description.strip() if description else None,
+        severity=severity.strip().lower() if severity else None,
+        cvss_score=cvss_score.strip() if cvss_score else None,
+        affected_product=affected_product.strip() if affected_product else None,
+        affected_version=affected_version.strip() if affected_version else None,
+        patch_available=patch_available,
+        patch_details=patch_details.strip() if patch_details else None,
+        discovered_date=parsed_discovered,
+        patched_date=parsed_patched,
+        event_id=event_id if event_id else None,
+    )
+    session.add(vuln)
+    session.commit()
+    session.close()
+    return RedirectResponse(url="/vulnerabilities", status_code=303)
+
+
+@app.post("/vulnerabilities/{id}/edit")
+async def edit_vulnerability(
+    id: int,
+    cve_id: Optional[str] = Form(None),
+    title: str = Form(...),
+    description: Optional[str] = Form(None),
+    severity: Optional[str] = Form(None),
+    cvss_score: Optional[str] = Form(None),
+    affected_product: Optional[str] = Form(None),
+    affected_version: Optional[str] = Form(None),
+    patch_available: bool = Form(False),
+    patch_details: Optional[str] = Form(None),
+    discovered_date: Optional[str] = Form(None),
+    patched_date: Optional[str] = Form(None),
+    event_id: Optional[int] = Form(None),
+):
+    """Update an existing vulnerability."""
+    session = get_session(DEFAULT_DB_PATH)
+    vuln = session.query(Vulnerability).filter(Vulnerability.id == id).first()
+    if not vuln:
+        session.close()
+        return RedirectResponse(url="/vulnerabilities", status_code=303)
+    
+    parsed_discovered = None
+    if discovered_date:
+        try:
+            parsed_discovered = datetime.strptime(discovered_date, '%Y-%m-%d')
+        except ValueError:
+            pass
+    
+    parsed_patched = None
+    if patched_date:
+        try:
+            parsed_patched = datetime.strptime(patched_date, '%Y-%m-%d')
+        except ValueError:
+            pass
+    
+    vuln.cve_id = cve_id.strip() if cve_id else None
+    vuln.title = title.strip()
+    vuln.description = description.strip() if description else None
+    vuln.severity = severity.strip().lower() if severity else None
+    vuln.cvss_score = cvss_score.strip() if cvss_score else None
+    vuln.affected_product = affected_product.strip() if affected_product else None
+    vuln.affected_version = affected_version.strip() if affected_version else None
+    vuln.patch_available = patch_available
+    vuln.patch_details = patch_details.strip() if patch_details else None
+    vuln.discovered_date = parsed_discovered
+    vuln.patched_date = parsed_patched
+    vuln.event_id = event_id if event_id else None
+    
+    redirect_url = f"/events/{vuln.event_id}" if vuln.event_id else "/vulnerabilities"
+    session.commit()
+    session.close()
+    return RedirectResponse(url=redirect_url, status_code=303)
+
+
+@app.post("/vulnerabilities/{id}/delete")
+async def delete_vulnerability(id: int):
+    """Delete a vulnerability."""
+    session = get_session(DEFAULT_DB_PATH)
+    vuln = session.query(Vulnerability).filter(Vulnerability.id == id).first()
+    if vuln:
+        event_id = vuln.event_id
+        session.delete(vuln)
+        session.commit()
+        session.close()
+        redirect_url = f"/events/{event_id}" if event_id else "/vulnerabilities"
+        return RedirectResponse(url=redirect_url, status_code=303)
+    session.close()
+    return RedirectResponse(url="/vulnerabilities", status_code=303)
 
 
 @app.get("/api/charts/events-timeline")
@@ -948,6 +1085,29 @@ async def generate_report(audience: str, period_type: str, period: str):
     
     top_apts = sorted(apt_associations.items(), key=lambda x: x[1], reverse=True)[:5]
     
+    # Get vulnerability metrics
+    vulnerabilities = session.query(Vulnerability).filter(
+        ((Vulnerability.created_at >= window_start) & (Vulnerability.created_at < window_end)) |
+        ((Vulnerability.discovered_date >= window_start) & (Vulnerability.discovered_date < window_end))
+    ).all()
+    
+    # Count new vulnerabilities (discovered in the period)
+    new_vulnerabilities = len([v for v in vulnerabilities if v.discovered_date and in_window(v.discovered_date)])
+    
+    # Count patched vulnerabilities (patched_date in the period)
+    patched_vulnerabilities = len([v for v in vulnerabilities if v.patched_date and in_window(v.patched_date)])
+    
+    # Calculate average patch time (discovered_date to patched_date)
+    avg_patch_time = None
+    vulnerabilities_with_patches = [v for v in vulnerabilities if v.discovered_date and v.patched_date and v.discovered_date <= v.patched_date]
+    if vulnerabilities_with_patches:
+        total_patch_days = 0
+        for v in vulnerabilities_with_patches:
+            days_diff = (v.patched_date - v.discovered_date).days
+            # If patched same day, count as 1 day
+            total_patch_days += max(1, days_diff)
+        avg_patch_time = round(total_patch_days / len(vulnerabilities_with_patches), 1)
+    
     # Calculate average days to resolution for events closed in this period
     closed_in_period = [e for e in events if e.closed_date and in_window(e.closed_date)]
     avg_days_to_resolution = None
@@ -970,7 +1130,8 @@ async def generate_report(audience: str, period_type: str, period: str):
         html = generate_executive_report(period_label, period_type, total_events, open_events, resolved_events, 
                                          critical_events, high_events, total_malware, malware_linked_to_events,
                                          total_phishing, phishing_linked_to_events, severity_counts, event_type_counts, top_malware, top_senders,
-                                         daily_malware, daily_phishing, top_targets, top_apts, avg_days_to_resolution, top_categories)
+                                         daily_malware, daily_phishing, top_targets, top_apts, avg_days_to_resolution, top_categories,
+                                         new_vulnerabilities, patched_vulnerabilities, avg_patch_time)
     elif audience == "it":
         html = generate_it_report(period_label, total_events, open_events, resolved_events, in_progress_events,
                                   critical_events, high_events, medium_events, low_events,
@@ -986,7 +1147,8 @@ async def generate_report(audience: str, period_type: str, period: str):
 def generate_executive_report(period_label, period_type, total_events, open_events, resolved_events, critical_events,
                               high_events, total_malware, malware_linked_to_events, total_phishing, phishing_linked_to_events,
                               severity_counts, event_type_counts, top_malware, top_senders, daily_malware, daily_phishing, 
-                              top_targets, top_apts, avg_days_to_resolution=None, top_categories=None):
+                              top_targets, top_apts, avg_days_to_resolution=None, top_categories=None, new_vulnerabilities=0, 
+                              patched_vulnerabilities=0, avg_patch_time=None):
     """Generate executive summary report"""
     
     # Generate trend visualization data only for quarter and year reports
@@ -1097,23 +1259,47 @@ def generate_executive_report(period_label, period_type, total_events, open_even
     <p>This report provides a high-level overview of security incidents and threats detected within your organization for {period_label}.</p>
     
     <h2>Key Metrics</h2>
-    <div style="display: flex; flex-wrap: wrap; gap: 2rem; margin: 1.5rem 0;">
-      <div class="metric">
-        <div class="metric-value">{total_events}</div>
-                <div class="metric-label">New Events</div>
+    
+    <!-- Events Metrics Box -->
+    <div style="background-color: #f0f4f9; padding: 1.5rem; border-radius: 6px; border-left: 4px solid #1a73e8; margin-bottom: 1.5rem;">
+      <h3 style="margin-top: 0; color: #1a73e8;">Events</h3>
+      <div style="display: flex; flex-wrap: wrap; gap: 2rem; margin-top: 1rem;">
+        <div class="metric">
+          <div class="metric-value" style="color: #1a73e8;">{total_events}</div>
+          <div class="metric-label" style="color: #333;">New Events</div>
+        </div>
+        <div class="metric">
+          <div class="metric-value" style="color: #d93025;">{open_events}</div>
+          <div class="metric-label" style="color: #333;">Open Events</div>
+        </div>
+        <div class="metric">
+          <div class="metric-value" style="color: #1e8e3e;">{resolved_events}</div>
+          <div class="metric-label" style="color: #333;">Resolved Events</div>
+        </div>
+        {f'''<div class="metric">
+          <div class="metric-value" style="color: #1a73e8;">{avg_days_to_resolution}</div>
+          <div class="metric-label" style="color: #333;">Avg Days to Resolution</div>
+        </div>''' if avg_days_to_resolution is not None else ''}
       </div>
-      <div class="metric">
-        <div class="metric-value" style="color: #d93025;">{open_events}</div>
-        <div class="metric-label">Open Events</div>
+    </div>
+    
+    <!-- Vulnerabilities Metrics Box -->
+    <div style="background-color: #fff3cd; padding: 1.5rem; border-radius: 6px; border-left: 4px solid #f9ab00; margin-bottom: 1.5rem;">
+      <h3 style="margin-top: 0; color: #f9ab00;">Vulnerabilities</h3>
+      <div style="display: flex; flex-wrap: wrap; gap: 2rem; margin-top: 1rem;">
+        <div class="metric">
+          <div class="metric-value" style="color: #1a73e8;">{new_vulnerabilities}</div>
+          <div class="metric-label" style="color: #333;">New Vulnerabilities</div>
+        </div>
+        <div class="metric">
+          <div class="metric-value" style="color: #1e8e3e;">{patched_vulnerabilities}</div>
+          <div class="metric-label" style="color: #333;">Patched Vulnerabilities</div>
+        </div>
+        {f'''<div class="metric">
+          <div class="metric-value" style="color: #f9ab00;">{avg_patch_time}</div>
+          <div class="metric-label" style="color: #333;">Avg Patch Time (days)</div>
+        </div>''' if avg_patch_time is not None and avg_patch_time >= 0 else ''}
       </div>
-      <div class="metric">
-        <div class="metric-value" style="color: #1e8e3e;">{resolved_events}</div>
-        <div class="metric-label">Resolved Events</div>
-      </div>
-      {f'''<div class="metric">
-        <div class="metric-value" style="color: #1a73e8;">{avg_days_to_resolution}</div>
-        <div class="metric-label">Avg Days to Resolution</div>
-      </div>''' if avg_days_to_resolution is not None else ''}
     </div>
     
     {trend_section}
@@ -2357,6 +2543,121 @@ async def delete_mitigation(id: int):
     return RedirectResponse(url="/events", status_code=303)
 
 
+# ==================== VULNERABILITY ENDPOINTS (Event-specific) ====================
+
+@app.get("/events/{event_id}/vulnerability/new/form", response_class=HTMLResponse)
+async def new_vulnerability_form(request: Request, event_id: int):
+    """Form to add a new vulnerability to an event."""
+    session = get_session(DEFAULT_DB_PATH)
+    event = session.query(Event).filter(Event.id == event_id).first()
+    if not event:
+        session.close()
+        return "Event not found", 404
+    template = env.get_template("vulnerability/form.html")
+    result = template.render(
+        request=request,
+        vulnerability=None,
+        event=event,
+        action=f"/events/{event_id}/vulnerability/new"
+    )
+    session.close()
+    return result
+
+
+@app.post("/events/{event_id}/vulnerability/new")
+async def create_vulnerability_for_event(
+    event_id: int,
+    cve_id: Optional[str] = Form(None),
+    title: str = Form(...),
+    severity: Optional[str] = Form(None),
+    cvss_score: Optional[str] = Form(None),
+    affected_product: Optional[str] = Form(None),
+    affected_version: Optional[str] = Form(None),
+    description: Optional[str] = Form(None),
+    patch_available: Optional[str] = Form(None),
+    patch_details: Optional[str] = Form(None),
+    discovered_date: Optional[str] = Form(None),
+    patched_date: Optional[str] = Form(None),
+):
+    """Create a new vulnerability linked to an event."""
+    session = get_session(DEFAULT_DB_PATH)
+    
+    # Parse dates
+    discovered = parse_date(discovered_date) if discovered_date else None
+    patched = parse_date(patched_date) if patched_date else None
+    
+    # Parse patch_available boolean
+    patch_avail = patch_available == 'on'
+    
+    vulnerability = Vulnerability(
+        cve_id=cve_id.strip() if cve_id else None,
+        title=title,
+        severity=severity if severity else None,
+        cvss_score=cvss_score.strip() if cvss_score else None,
+        affected_product=affected_product.strip() if affected_product else None,
+        affected_version=affected_version.strip() if affected_version else None,
+        description=description.strip() if description else None,
+        patch_available=patch_avail,
+        patch_details=patch_details.strip() if patch_details else None,
+        discovered_date=discovered,
+        patched_date=patched,
+        event_id=event_id,
+    )
+    
+    session.add(vulnerability)
+    session.commit()
+    session.close()
+    return RedirectResponse(url=f"/events/{event_id}", status_code=303)
+
+
+@app.get("/vulnerabilities/{id}/edit", response_class=HTMLResponse)
+async def edit_vulnerability_form(request: Request, id: int):
+    """Form to edit an existing vulnerability."""
+    session = get_session(DEFAULT_DB_PATH)
+    vulnerability = session.query(Vulnerability).filter(Vulnerability.id == id).first()
+    if not vulnerability:
+        session.close()
+        return "Vulnerability not found", 404
+    
+    event = None
+    if vulnerability.event_id:
+        event = session.query(Event).filter(Event.id == vulnerability.event_id).first()
+    
+    template = env.get_template("vulnerability/form.html")
+    result = template.render(
+        request=request,
+        vulnerability=vulnerability,
+        event=event,
+        action=f"/vulnerabilities/{id}/edit"
+    )
+    session.close()
+    return result
+
+
+@app.get("/vulnerabilities/new/form", response_class=HTMLResponse)
+async def new_standalone_vulnerability_form(request: Request):
+    """Form to create a new vulnerability (not linked to event)."""
+    session = get_session(DEFAULT_DB_PATH)
+    events = (
+        session.query(Event)
+        .order_by(
+            Event.event_date.is_(None),
+            Event.event_date.desc(),
+            Event.created_at.desc(),
+        )
+        .all()
+    )
+    template = env.get_template("vulnerability/standalone_form.html")
+    result = template.render(
+        request=request,
+        vulnerability=None,
+        events=events,
+        action="/vulnerabilities/new"
+    )
+    session.close()
+    return result
+
+
 # Standalone entity management pages
 @app.get("/malware", response_class=HTMLResponse)
 async def list_all_malware(request: Request):
@@ -2833,6 +3134,22 @@ async def export_data():
     )
 
 
+@app.get("/settings/download/malware-template")
+async def download_malware_template():
+    """Download a CSV template for malware import."""
+    output = io.StringIO()
+    writer = csv.writer(output)
+    writer.writerow(["name", "family", "category", "description", "occurrence_date", "event_id"])
+    writer.writerow(["Emotet", "Emotet", "Trojan", "Banking trojan", "2025-12-10", "12"])
+    writer.writerow(["WannaCry", "WannaCry", "Ransomware", "Crypto ransomware", "2025-12-11", ""])
+    
+    output.seek(0)
+    return StreamingResponse(
+        iter([output.getvalue()]),
+        media_type="text/csv",
+        headers={"Content-Disposition": "attachment; filename=malware_template.csv"}
+    )
+
 @app.post("/settings/import/malware-csv")
 async def import_malware_csv(file: UploadFile = File(...)):
     """Import malware records from a CSV file.
@@ -2899,6 +3216,22 @@ async def import_malware_csv(file: UploadFile = File(...)):
     )
 
 
+@app.get("/settings/download/phishing-template")
+async def download_phishing_template():
+    """Download a CSV template for phishing import."""
+    output = io.StringIO()
+    writer = csv.writer(output)
+    writer.writerow(["subject", "sender", "target", "description", "risk_level", "occurrence_date", "event_id"])
+    writer.writerow(["Invoice required", "accounts@bad.com", "finance@company.com", "Payment request", "high", "2025-12-10", "12"])
+    writer.writerow(["Password reset", "support@fake.com", "admin@company.com", "Credential harvesting", "critical", "2025-12-11", ""])
+    
+    output.seek(0)
+    return StreamingResponse(
+        iter([output.getvalue()]),
+        media_type="text/csv",
+        headers={"Content-Disposition": "attachment; filename=phishing_template.csv"}
+    )
+
 @app.post("/settings/import/phish-csv")
 async def import_phish_csv(file: UploadFile = File(...)):
     """Import phishing records from a CSV file.
@@ -2962,6 +3295,116 @@ async def import_phish_csv(file: UploadFile = File(...)):
         url=f"/settings?phish_imported={imported}&phish_failed={failed}",
         status_code=303,
     )
+
+
+@app.get("/settings/download/vulnerabilities-template")
+async def download_vulnerabilities_template():
+    """Download a CSV template for vulnerabilities import."""
+    output = io.StringIO()
+    writer = csv.writer(output)
+    writer.writerow(["cve_id", "title", "severity", "cvss_score", "affected_product", "affected_version", 
+                     "description", "patch_available", "patch_details", "discovered_date", "patched_date", "event_id"])
+    writer.writerow(["CVE-2024-1234", "Critical RCE in Apache", "critical", "9.8", "Apache HTTP Server", "2.4.58", 
+                     "Remote code execution via buffer overflow", "yes", "Upgrade to 2.4.59", "2024-01-10", "2024-01-15", "12"])
+    writer.writerow(["CVE-2024-5678", "SQL Injection in CMS", "high", "8.5", "WordPress Plugin XYZ", "1.2.3", 
+                     "SQL injection in search parameter", "yes", "Update to version 1.2.4", "2024-02-01", "", ""])
+    
+    output.seek(0)
+    return StreamingResponse(
+        iter([output.getvalue()]),
+        media_type="text/csv",
+        headers={"Content-Disposition": "attachment; filename=vulnerabilities_template.csv"}
+    )
+
+
+@app.post("/settings/import/vulnerabilities-csv")
+async def import_vulnerabilities_csv(file: UploadFile = File(...)):
+    """Import vulnerability records from a CSV file.
+
+    Expected columns (header names, case-insensitive):
+    - title (required)
+    - cve_id (optional)
+    - severity (optional: low|medium|high|critical)
+    - cvss_score (optional)
+    - affected_product (optional)
+    - affected_version (optional)
+    - description (optional)
+    - patch_available (optional: yes/no/true/false)
+    - patch_details (optional)
+    - discovered_date (YYYY-MM-DD, optional)
+    - patched_date (YYYY-MM-DD, optional)
+    - event_id (optional, will link if exists)
+    """
+    session = get_session(DEFAULT_DB_PATH)
+    content = await file.read()
+    text = content.decode("utf-8", errors="ignore")
+    if text.startswith("\ufeff"):
+        text = text.lstrip("\ufeff")
+    reader = csv.DictReader(io.StringIO(text))
+
+    imported = 0
+    failed = 0
+
+    for row in reader:
+        row = normalize_row(row)
+        title = (row.get("title") or "").strip()
+        if not title:
+            failed += 1
+            continue
+
+        cve_id = (row.get("cve_id") or row.get("cve") or "").strip() or None
+        severity = (row.get("severity") or "").strip().lower() or None
+        if severity and severity not in {"low", "medium", "high", "critical"}:
+            severity = None
+        
+        cvss_score = (row.get("cvss_score") or row.get("cvss") or "").strip() or None
+        affected_product = (row.get("affected_product") or row.get("product") or "").strip() or None
+        affected_version = (row.get("affected_version") or row.get("version") or "").strip() or None
+        description = (row.get("description") or "").strip() or None
+        patch_details = (row.get("patch_details") or "").strip() or None
+        
+        # Parse patch_available boolean
+        patch_available = False
+        patch_val = (row.get("patch_available") or row.get("patch") or "").strip().lower()
+        if patch_val in {"yes", "true", "1", "y", "t"}:
+            patch_available = True
+        
+        # Parse dates
+        discovered_date = parse_date(row.get("discovered_date") or row.get("discovered"))
+        patched_date = parse_date(row.get("patched_date") or row.get("patched"))
+
+        # Parse event_id
+        event_id = None
+        raw_eid = row.get("event_id") or row.get("event")
+        if raw_eid:
+            try:
+                event_id = int(raw_eid)
+            except ValueError:
+                event_id = None
+
+        vuln = Vulnerability(
+            cve_id=cve_id,
+            title=title,
+            severity=severity,
+            cvss_score=cvss_score,
+            affected_product=affected_product,
+            affected_version=affected_version,
+            description=description,
+            patch_available=patch_available,
+            patch_details=patch_details,
+            discovered_date=discovered_date,
+            patched_date=patched_date,
+            event_id=event_id,
+        )
+        session.add(vuln)
+        imported += 1
+
+    session.commit()
+    return RedirectResponse(
+        url=f"/settings?vuln_imported={imported}&vuln_failed={failed}",
+        status_code=303,
+    )
+
 
 # ==================== APT ENDPOINTS ====================
 

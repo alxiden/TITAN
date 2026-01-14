@@ -36,13 +36,6 @@ apt_iocs = Table(
     Column('ioc_id', Integer, ForeignKey('iocs.id'), primary_key=True)
 )
 
-apt_vulnerabilities = Table(
-    'apt_vulnerabilities',
-    Base.metadata,
-    Column('apt_id', Integer, ForeignKey('apts.id'), primary_key=True),
-    Column('vulnerability_id', Integer, ForeignKey('vulnerabilities.id'), primary_key=True)
-)
-
 
 class EventStatus(enum.Enum):
     OPEN = "open"
@@ -81,7 +74,6 @@ class APT(Base):
     malware = relationship("Malware", secondary=apt_malware, back_populates="apts")
     phishing = relationship("Phish", secondary=apt_phishing, back_populates="apts")
     iocs = relationship("IOC", secondary=apt_iocs, back_populates="apts")
-    vulnerabilities = relationship("Vulnerability", secondary=apt_vulnerabilities, back_populates="apts")
 
 
 class Event(Base):
@@ -102,7 +94,6 @@ class Event(Base):
     apts = relationship("APT", secondary=apt_events, back_populates="events")
     malware_instances = relationship("Malware", back_populates="event")
     phishing_instances = relationship("Phish", back_populates="event")
-    vulnerability_instances = relationship("Vulnerability", back_populates="event")
     mitigations = relationship("Mitigation", back_populates="event", cascade="all, delete-orphan")
 
 
@@ -203,27 +194,3 @@ class MalwareCategory(Base):
 
     # Relationships
     malware_items = relationship("Malware", back_populates="category_ref")
-
-
-class Vulnerability(Base):
-    """Vulnerability instance - CVE or other security vulnerabilities"""
-    __tablename__ = "vulnerabilities"
-    id = Column(Integer, primary_key=True)
-    cve_id = Column(String(32), nullable=True)  # CVE-YYYY-NNNNN format
-    title = Column(String(256), nullable=False)
-    description = Column(Text, nullable=True)
-    severity = Column(String(16), nullable=True)  # critical, high, medium, low
-    cvss_score = Column(String(16), nullable=True)  # e.g., "9.8", "7.5"
-    affected_product = Column(String(256), nullable=True)
-    affected_version = Column(String(128), nullable=True)
-    patch_available = Column(Boolean, default=False, nullable=False)
-    patch_details = Column(Text, nullable=True)
-    discovered_date = Column(DateTime, nullable=True)  # When vulnerability was first discovered
-    patched_date = Column(DateTime, nullable=True)  # When patch was applied
-    event_id = Column(Integer, ForeignKey("events.id"), nullable=True)
-    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
-    
-    # Relationships
-    apts = relationship("APT", secondary=apt_vulnerabilities, back_populates="vulnerabilities")
-    event = relationship("Event", back_populates="vulnerability_instances")

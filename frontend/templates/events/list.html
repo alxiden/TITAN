@@ -29,6 +29,7 @@
           <th>Closed Date</th>
           <th>Malware</th>
           <th>Phishing</th>
+          <th>Vulns</th>
           <th>Mitigations</th>
           <th>Actions</th>
         </tr>
@@ -44,6 +45,7 @@
           <td>{{ event.closed_date.strftime('%Y-%m-%d') if event.closed_date else '—' }}</td>
           <td>{{ event.malware_instances|length }}</td>
           <td>{{ event.phishing_instances|length }}</td>
+          <td>{{ event.vulnerability_instances|length }}</td>
           <td>{{ event.mitigations|length }}</td>
           <td class="actions">
             <a href="/events/{{ event.id }}/edit" class="btn-small">Edit</a>

@@ -48,7 +48,6 @@ from sqlalchemy import text
 
 DEFAULT_DB_PATH = Path(os.environ.get("TITAN_DB_PATH", "./TITAN-data/titan.sqlite")).resolve()
 
-
 def get_database_url(path: Path = DEFAULT_DB_PATH) -> str:
     path.parent.mkdir(parents=True, exist_ok=True)
     return f"sqlite:///{path}"
