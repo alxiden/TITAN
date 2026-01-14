@@ -1891,6 +1891,53 @@ async def event_status_summary(days: int = 30):
     }
 
 
+@app.get("/api/dashboard/counts")
+async def dashboard_counts(days: int = 30):
+    """Get dashboard counts for the last N days"""
+    from datetime import timedelta
+    session = get_session(DEFAULT_DB_PATH)
+    cutoff_date = datetime.utcnow() - timedelta(days=days)
+    
+    # Get counts within the date range
+    events = session.query(Event).filter(
+        (Event.event_date >= cutoff_date) | 
+        ((Event.event_date == None) & (Event.created_at >= cutoff_date))
+    ).all()
+    
+    malware = session.query(Malware).filter(
+        (Malware.occurrence_date >= cutoff_date) |
+        ((Malware.occurrence_date == None) & (Malware.created_at >= cutoff_date))
+    ).all()
+    
+    phishing = session.query(Phish).filter(
+        (Phish.occurrence_date >= cutoff_date) |
+        ((Phish.occurrence_date == None) & (Phish.created_at >= cutoff_date))
+    ).all()
+    
+    iocs = session.query(IOC).filter(IOC.created_at >= cutoff_date).all()
+    
+    vulnerabilities = session.query(Vulnerability).filter(
+        (Vulnerability.discovered_date >= cutoff_date) |
+        ((Vulnerability.discovered_date == None) & (Vulnerability.created_at >= cutoff_date))
+    ).all()
+    
+    mitigations = session.query(Mitigation).filter(Mitigation.created_at >= cutoff_date).all()
+    
+    apts = session.query(APT).filter(APT.created_at >= cutoff_date).all()
+    
+    session.close()
+    
+    return {
+        "events": len(events),
+        "malware": len(malware),
+        "phishing": len(phishing),
+        "iocs": len(iocs),
+        "vulnerabilities": len(vulnerabilities),
+        "mitigations": len(mitigations),
+        "apts": len(apts)
+    }
+
+
 # Events CRUD
 @app.get("/events", response_class=HTMLResponse)
 async def list_events(request: Request):

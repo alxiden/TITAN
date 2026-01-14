@@ -248,8 +248,36 @@
     }
 
     const rangeSelect = document.getElementById('rangeSelect');
+    
+    function updateCounts(days) {
+      fetch(`/api/dashboard/counts?days=${days}`)
+        .then(res => res.json())
+        .then(data => {
+          // Update the count boxes at the top
+          document.querySelectorAll('.card-link').forEach(card => {
+            const h3 = card.querySelector('h3');
+            const countEl = card.querySelector('.count');
+            if (!h3 || !countEl) return;
+            
+            const title = h3.textContent.trim();
+            let newCount = 0;
+            
+            if (title === 'Events') newCount = data.events;
+            else if (title === 'Malware') newCount = data.malware;
+            else if (title === 'Phishing') newCount = data.phishing;
+            else if (title === 'IOCs') newCount = data.iocs;
+            else if (title === 'Vulnerabilities') newCount = data.vulnerabilities;
+            else if (title === 'Mitigations') newCount = data.mitigations;
+            else if (title === 'APTs') newCount = data.apts;
+            
+            countEl.textContent = newCount;
+          });
+        });
+    }
+    
     function loadAllCharts() {
       const days = parseInt(rangeSelect.value, 10);
+      updateCounts(days);
       renderEventStatus(days);
       renderPhishOverTime(days);
       renderMalwareBreakdown(days);
