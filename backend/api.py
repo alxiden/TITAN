@@ -7,7 +7,7 @@ import csv
 import json
 from sqlalchemy import func, or_
 from .db_init import get_session, DEFAULT_DB_PATH
-from .db_models import Event, Malware, MalwareFamily, MalwareCategory, Phish, IOC, Mitigation, APT, EventStatus, EventType, Vulnerability
+from .db_models import Event, Malware, MalwareFamily, MalwareCategory, Phish, IOC, Mitigation, APT, EventStatus, EventType, Vulnerability, Cluster, ClusterType
 from jinja2 import Environment, FileSystemLoader, select_autoescape
 from datetime import datetime
 from typing import Optional, List
@@ -100,6 +100,43 @@ async def malware_by_family(days: int = 30, start: Optional[str] = None, end: Op
         dt = m.occurrence_date if m.occurrence_date else m.created_at
         if window_start <= dt < window_end:
             name = (m.family_ref.name if m.family_ref else (m.family or '')).strip()
+            if name:
+                counts[name] = counts.get(name, 0) + 1
+    sorted_items = sorted(counts.items(), key=lambda x: x[1], reverse=True)[:top]
+    labels = [k for k,_ in sorted_items]
+    data = [v for _,v in sorted_items]
+    return {"labels": labels, "data": data}
+
+
+@app.get("/api/charts/malware-by-category")
+async def malware_by_category(days: int = 30, start: Optional[str] = None, end: Optional[str] = None, top: int = 10):
+    """Top malware categories within window"""
+    from datetime import timedelta
+    session = get_session(DEFAULT_DB_PATH)
+    now = datetime.utcnow()
+    window_start = now - timedelta(days=days)
+    window_end = now
+    if start:
+        try:
+            window_start = datetime.strptime(start, '%Y-%m-%d')
+        except ValueError:
+            pass
+    if end:
+        try:
+            window_end = datetime.strptime(end, '%Y-%m-%d') + timedelta(days=1)
+        except ValueError:
+            pass
+
+    items = session.query(Malware).all()
+    counts = {}
+    for m in items:
+        dt = m.occurrence_date if m.occurrence_date else m.created_at
+        if window_start <= dt < window_end:
+            name = ""
+            if m.category_ref and m.category_ref.name:
+                name = m.category_ref.name.strip()
+            elif m.category:
+                name = m.category.strip()
             if name:
                 counts[name] = counts.get(name, 0) + 1
     sorted_items = sorted(counts.items(), key=lambda x: x[1], reverse=True)[:top]
@@ -883,6 +920,185 @@ async def reports(request: Request):
         counts=counts,
         db_path=str(DEFAULT_DB_PATH),
     )
+
+
+@app.get("/research", response_class=HTMLResponse)
+async def research(request: Request):
+    """Render the research workspace page"""
+    session = get_session(DEFAULT_DB_PATH)
+    counts = db_counts(session)
+    # Load current clusters (most recent first)
+    clusters = session.query(Cluster).order_by(Cluster.created_at.desc()).limit(50).all()
+    template = env.get_template("research.html")
+    return template.render(
+        request=request,
+        title="TITAN — Research",
+        counts=counts,
+        db_path=str(DEFAULT_DB_PATH),
+        clusters=clusters,
+    )
+
+
+@app.get("/research/{cluster_id}", response_class=HTMLResponse)
+async def research_detail(request: Request, cluster_id: int):
+    """View a single cluster and its members"""
+    session = get_session(DEFAULT_DB_PATH)
+    counts = db_counts(session)
+    cluster = session.query(Cluster).filter(Cluster.id == cluster_id).first()
+    if not cluster:
+        return HTMLResponse(content="<h1>Cluster not found</h1>", status_code=404)
+    template = env.get_template("research_detail.html")
+    return template.render(
+        request=request,
+        title=f"TITAN — Research: {cluster.title}",
+        counts=counts,
+        db_path=str(DEFAULT_DB_PATH),
+        cluster=cluster,
+    )
+
+
+@app.get("/api/research/candidates")
+async def research_candidates(type: str, days: int = 30, q: Optional[str] = None):
+    """Return recent items by type for attaching to clusters."""
+    from datetime import timedelta
+    session = get_session(DEFAULT_DB_PATH)
+    now = datetime.utcnow()
+    window_start = now - timedelta(days=days)
+    qnorm = (q or "").strip().lower()
+    items = []
+    if type == "phishing":
+        ph = session.query(Phish).order_by(Phish.created_at.desc()).limit(500).all()
+        for p in ph:
+            if p.created_at and p.created_at < window_start:
+                continue
+            text = f"{p.subject or ''} {p.sender or ''} {p.target or ''}".lower()
+            if qnorm and qnorm not in text:
+                continue
+            items.append({"id": p.id, "label": (p.subject or "Untitled"), "meta": p.sender or ""})
+    elif type == "malware":
+        mw = session.query(Malware).order_by(Malware.created_at.desc()).limit(500).all()
+        for m in mw:
+            if m.created_at and m.created_at < window_start:
+                continue
+            text = f"{m.name or ''} {m.family or ''} {m.category or ''}".lower()
+            if qnorm and qnorm not in text:
+                continue
+            items.append({"id": m.id, "label": (m.name or "Unnamed"), "meta": (m.family or m.category or "")})
+    elif type == "ioc":
+        io = session.query(IOC).order_by(IOC.created_at.desc()).limit(500).all()
+        for i in io:
+            if i.created_at and i.created_at < window_start:
+                continue
+            text = f"{i.type or ''} {i.value or ''}".lower()
+            if qnorm and qnorm not in text:
+                continue
+            items.append({"id": i.id, "label": (i.value or ""), "meta": (i.type or "")})
+    elif type == "event":
+        evs = session.query(Event).order_by(Event.created_at.desc()).limit(500).all()
+        for e in evs:
+            if e.created_at and e.created_at < window_start:
+                continue
+            text = f"{e.title or ''} {e.severity or ''} {e.type.value if e.type else ''}".lower()
+            if qnorm and qnorm not in text:
+                continue
+            items.append({"id": e.id, "label": (e.title or "Untitled"), "meta": (e.severity or "")})
+    else:
+        return {"error": "Invalid type"}, 400
+    return {"items": items[:100]}
+
+
+@app.post("/api/research/cluster/{cluster_id}/attach")
+async def research_attach(cluster_id: int, type: str = Form(...), item_id: int = Form(...)):
+    """Attach an item to a cluster."""
+    session = get_session(DEFAULT_DB_PATH)
+    cluster = session.query(Cluster).filter(Cluster.id == cluster_id).first()
+    if not cluster:
+        return {"error": "Cluster not found"}, 404
+    if type == "phishing":
+        item = session.query(Phish).filter(Phish.id == item_id).first()
+        if not item:
+            return {"error": "Phish not found"}, 404
+        cluster.phishing.append(item)
+    elif type == "malware":
+        item = session.query(Malware).filter(Malware.id == item_id).first()
+        if not item:
+            return {"error": "Malware not found"}, 404
+        cluster.malware.append(item)
+    elif type == "ioc":
+        item = session.query(IOC).filter(IOC.id == item_id).first()
+        if not item:
+            return {"error": "IOC not found"}, 404
+        cluster.iocs.append(item)
+    elif type == "event":
+        item = session.query(Event).filter(Event.id == item_id).first()
+        if not item:
+            return {"error": "Event not found"}, 404
+        cluster.events.append(item)
+    else:
+        return {"error": "Invalid type"}, 400
+    session.add(cluster)
+    session.commit()
+    return {"message": "Attached"}
+
+
+@app.post("/api/research/cluster/{cluster_id}/detach")
+async def research_detach(cluster_id: int, type: str = Form(...), item_id: int = Form(...)):
+    """Detach an item from a cluster."""
+    session = get_session(DEFAULT_DB_PATH)
+    cluster = session.query(Cluster).filter(Cluster.id == cluster_id).first()
+    if not cluster:
+        return {"error": "Cluster not found"}, 404
+    removed = False
+    if type == "phishing":
+        cluster.phishing = [p for p in cluster.phishing if p.id != item_id]
+        removed = True
+    elif type == "malware":
+        cluster.malware = [m for m in cluster.malware if m.id != item_id]
+        removed = True
+    elif type == "ioc":
+        cluster.iocs = [i for i in cluster.iocs if i.id != item_id]
+        removed = True
+    elif type == "event":
+        cluster.events = [e for e in cluster.events if e.id != item_id]
+        removed = True
+    else:
+        return {"error": "Invalid type"}, 400
+    if removed:
+        session.add(cluster)
+        session.commit()
+    return {"message": "Detached"}
+
+
+@app.post("/api/research/start")
+async def start_research(
+    title: str = Form(...),
+    cluster_type: str = Form("mixed"),
+    time_start: Optional[str] = Form(None),
+    time_end: Optional[str] = Form(None),
+    summary: Optional[str] = Form(None),
+):
+    """Create a new Cluster to begin a research session."""
+    session = get_session(DEFAULT_DB_PATH)
+    # Parse type
+    ctype_map = {"phishing": ClusterType.PHISHING, "malware": ClusterType.MALWARE, "mixed": ClusterType.MIXED}
+    ctype = ctype_map.get((cluster_type or "mixed").strip().lower(), ClusterType.MIXED)
+    # Parse dates
+    ts = parse_date(time_start) if time_start else None
+    te = parse_date(time_end) if time_end else None
+    c = Cluster(
+        title=title.strip(),
+        summary=(summary or None),
+        cluster_type=ctype,
+        time_start=ts,
+        time_end=te,
+        score=None,
+        apt_overlap_score=None,
+        shared_ioc_count=0,
+        shared_infra_count=0,
+    )
+    session.add(c)
+    session.commit()
+    return {"id": c.id, "message": "Research started"}
 
 
 @app.get("/api/reports/generate")

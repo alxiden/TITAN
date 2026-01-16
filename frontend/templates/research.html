@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>TITAN — Research</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link rel="stylesheet" href="/static/styles.css">
+</head>
+<body>
+  <header>
+    <div style="display: flex; justify-content: space-between; align-items: center;">
+      <div>
+        <h1>Research</h1>
+        <p class="muted">Database: {{ db_path }}</p>
+      </div>
+      <div style="display:flex; gap:0.5rem; margin-left:auto;">
+        <a href="/" class="btn">🏠 Home</a>
+        <a href="/reports" class="btn">📊 Reports</a>
+        <a href="/settings" class="btn">⚙️ Settings</a>
+      </div>
+    </div>
+  </header>
+
+  <main>
+    <div class="container-fluid">
+      <div class="row g-3">
+        <div class="col-12 col-xl-9">
+          <section class="info-card">
+            <h2>Start Research</h2>
+            <form id="startResearchForm" class="row g-3" method="post" action="/api/research/start">
+              <div class="col-md-6">
+                <label class="form-label">Title</label>
+                <input type="text" name="title" class="form-control" placeholder="e.g., Phish cluster: finance domains" required>
+              </div>
+              <div class="col-md-3">
+                <label class="form-label">Type</label>
+                <select name="cluster_type" class="form-select">
+                  <option value="mixed" selected>Mixed</option>
+                  <option value="phishing">Phishing</option>
+                  <option value="malware">Malware</option>
+                </select>
+              </div>
+              <div class="col-md-3">
+                <label class="form-label">Summary (optional)</label>
+                <input type="text" name="summary" class="form-control" placeholder="Initial hypothesis or scope">
+              </div>
+              <div class="col-md-3">
+                <label class="form-label">Start (optional)</label>
+                <input type="date" name="time_start" class="form-control">
+              </div>
+              <div class="col-md-3">
+                <label class="form-label">End (optional)</label>
+                <input type="date" name="time_end" class="form-control">
+              </div>
+              <div class="col-md-12 d-flex gap-2">
+                <button type="submit" class="btn btn-primary">Start Research</button>
+                <span id="startStatus" class="muted"></span>
+              </div>
+            </form>
+          </section>
+
+          <section class="info-card mt-3">
+            <h2>Recent Research</h2>
+            {% if clusters %}
+            <table class="table table-dark table-striped">
+              <thead>
+                <tr>
+                  <th>Title</th>
+                  <th>Type</th>
+                  <th>Start</th>
+                  <th>End</th>
+                  <th>Created</th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for c in clusters %}
+                <tr>
+                  <td><a href="/research/{{ c.id }}">{{ c.title }}</a></td>
+                  <td>{{ c.cluster_type.value }}</td>
+                  <td>{{ c.time_start.strftime('%Y-%m-%d') if c.time_start else '-' }}</td>
+                  <td>{{ c.time_end.strftime('%Y-%m-%d') if c.time_end else '-' }}</td>
+                  <td>{{ c.created_at.strftime('%Y-%m-%d') }}</td>
+                </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+            {% else %}
+              <p class="muted">No research started yet.</p>
+            {% endif %}
+          </section>
+        </div>
+        <aside class="col-12 col-xl-3">
+          <div class="important-info">
+            <h2>Summary</h2>
+            <div class="info-card">
+              <h3>Inventory</h3>
+              <ul class="links">
+                <li>Events: {{ counts.events }}</li>
+                <li>Malware: {{ counts.malware }}</li>
+                <li>Phishing: {{ counts.phishing }}</li>
+                <li>IOCs: {{ counts.iocs }}</li>
+                <li>APTs: {{ counts.apts }}</li>
+              </ul>
+            </div>
+          </div>
+        </aside>
+      </div>
+    </div>
+  </main>
+
+  <footer>
+    <p class="muted">© TITAN CTI Platform</p>
+  </footer>
+  <script>
+    const form = document.getElementById('startResearchForm');
+    const statusEl = document.getElementById('startStatus');
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      statusEl.textContent = 'Starting…';
+      const formData = new FormData(form);
+      try {
+        const res = await fetch('/api/research/start', { method: 'POST', body: formData });
+        const data = await res.json();
+        if (res.ok) {
+          statusEl.textContent = 'Research started';
+          // reload to show updated cluster list
+          setTimeout(() => { window.location.reload(); }, 600);
+        } else {
+          statusEl.textContent = data.error || 'Failed to start';
+        }
+      } catch (err) {
+        statusEl.textContent = 'Error starting research';
+      }
+    });
+  </script>
+</body>
+</html>

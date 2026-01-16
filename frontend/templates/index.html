@@ -15,6 +15,7 @@
         <p class="muted">Database: {{ db_path }}</p>
       </div>
       <div style="display:flex; gap:0.5rem; margin-left:auto;">
+        <a href="/research" class="btn">🧪 Research</a>
         <a href="/reports" class="btn">📊 Reports</a>
         <a href="/settings" class="btn">⚙️ Settings</a>
       </div>
@@ -91,7 +92,7 @@
               </div>
               <div class="col-12 col-lg-4">
                 <div class="chart-container">
-                  <h3>Malware Breakdown</h3>
+                  <h3>Malware by Category</h3>
                   <canvas id="malwareBreakdownChart"></canvas>
                 </div>
               </div>
@@ -156,6 +157,7 @@
               <ul class="links">
                 <li><a href="/events">View All Events</a></li>
                 <li><a href="/reports">Reports</a></li>
+                <li><a href="/research">Research</a></li>
                 <li><a href="/settings">Settings</a></li>
               </ul>
             </div>
@@ -224,7 +226,7 @@
     }
 
     function renderMalwareBreakdown(days) {
-      fetch(`/api/charts/malware-by-family?days=${days}&top=10`)
+      fetch(`/api/charts/malware-by-category?days=${days}&top=10`)
         .then(res => res.json())
         .then(data => {
           if (charts.malware) charts.malware.destroy();
@@ -233,7 +235,7 @@
             data: {
               labels: data.labels,
               datasets: [{
-                label: 'Malware (by family)',
+                label: 'Malware (by category)',
                 data: data.data,
                 backgroundColor: '#8e24aa'
               }]

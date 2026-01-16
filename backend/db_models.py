@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import Optional
 
-from sqlalchemy import Column, Integer, String, DateTime, Text, ForeignKey, Table, Boolean, Enum
+from sqlalchemy import Column, Integer, String, DateTime, Text, ForeignKey, Table, Boolean, Enum, Float
 from sqlalchemy.orm import declarative_base, relationship
 import enum
 
@@ -60,6 +60,74 @@ class EventType(enum.Enum):
     OTHER = "other"
 
 
+class ClusterType(enum.Enum):
+    PHISHING = "phishing"
+    MALWARE = "malware"
+    MIXED = "mixed"
+
+
+# Association tables for research clusters
+cluster_phishing = Table(
+    'cluster_phishing',
+    Base.metadata,
+    Column('cluster_id', Integer, ForeignKey('clusters.id'), primary_key=True),
+    Column('phish_id', Integer, ForeignKey('phishing.id'), primary_key=True)
+)
+
+cluster_malware = Table(
+    'cluster_malware',
+    Base.metadata,
+    Column('cluster_id', Integer, ForeignKey('clusters.id'), primary_key=True),
+    Column('malware_id', Integer, ForeignKey('malware.id'), primary_key=True)
+)
+
+cluster_iocs = Table(
+    'cluster_iocs',
+    Base.metadata,
+    Column('cluster_id', Integer, ForeignKey('clusters.id'), primary_key=True),
+    Column('ioc_id', Integer, ForeignKey('iocs.id'), primary_key=True)
+)
+
+cluster_apts = Table(
+    'cluster_apts',
+    Base.metadata,
+    Column('cluster_id', Integer, ForeignKey('clusters.id'), primary_key=True),
+    Column('apt_id', Integer, ForeignKey('apts.id'), primary_key=True)
+)
+
+# Optional event membership for clusters
+cluster_events = Table(
+    'cluster_events',
+    Base.metadata,
+    Column('cluster_id', Integer, ForeignKey('clusters.id'), primary_key=True),
+    Column('event_id', Integer, ForeignKey('events.id'), primary_key=True)
+)
+
+
+class Cluster(Base):
+    """Research cluster linking phishing, malware, IOCs, and inferred APT overlap."""
+    __tablename__ = "clusters"
+    id = Column(Integer, primary_key=True)
+    title = Column(String(256), nullable=False)
+    summary = Column(Text, nullable=True)
+    cluster_type = Column(Enum(ClusterType), nullable=False)
+    time_start = Column(DateTime, nullable=True)
+    time_end = Column(DateTime, nullable=True)
+    score = Column(Float, nullable=True)  # general confidence/strength 0-100
+    apt_overlap_score = Column(Float, nullable=True)  # degree of linkage to mapped APTs
+    shared_ioc_count = Column(Integer, default=0, nullable=False)
+    shared_infra_count = Column(Integer, default=0, nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+
+    # Relationships
+    phishing = relationship("Phish", secondary=cluster_phishing, back_populates="clusters")
+    malware = relationship("Malware", secondary=cluster_malware, back_populates="clusters")
+    iocs = relationship("IOC", secondary=cluster_iocs, back_populates="clusters")
+    apts = relationship("APT", secondary=cluster_apts, back_populates="clusters")
+    events = relationship("Event", secondary=cluster_events, back_populates="clusters")
+
+
 class APT(Base):
     """Advanced Persistent Threat entity"""
     __tablename__ = "apts"
@@ -82,6 +150,7 @@ class APT(Base):
     phishing = relationship("Phish", secondary=apt_phishing, back_populates="apts")
     iocs = relationship("IOC", secondary=apt_iocs, back_populates="apts")
     vulnerabilities = relationship("Vulnerability", secondary=apt_vulnerabilities, back_populates="apts")
+    clusters = relationship("Cluster", secondary=cluster_apts, back_populates="apts")
 
 
 class Event(Base):
@@ -104,6 +173,7 @@ class Event(Base):
     phishing_instances = relationship("Phish", back_populates="event")
     vulnerability_instances = relationship("Vulnerability", back_populates="event")
     mitigations = relationship("Mitigation", back_populates="event", cascade="all, delete-orphan")
+    clusters = relationship("Cluster", secondary=cluster_events, back_populates="events")
 
 
 class Malware(Base):
@@ -126,6 +196,7 @@ class Malware(Base):
     iocs = relationship("IOC", back_populates="malware", cascade="all, delete-orphan")
     family_ref = relationship("MalwareFamily", back_populates="malware_items")
     category_ref = relationship("MalwareCategory", back_populates="malware_items")
+    clusters = relationship("Cluster", secondary=cluster_malware, back_populates="malware")
 
 
 class Phish(Base):
@@ -145,6 +216,7 @@ class Phish(Base):
     apts = relationship("APT", secondary=apt_phishing, back_populates="phishing")
     event = relationship("Event", back_populates="phishing_instances")
     iocs = relationship("IOC", back_populates="phish", cascade="all, delete-orphan")
+    clusters = relationship("Cluster", secondary=cluster_phishing, back_populates="phishing")
 
 
 class IOC(Base):
@@ -166,6 +238,7 @@ class IOC(Base):
     apts = relationship("APT", secondary=apt_iocs, back_populates="iocs")
     malware = relationship("Malware", back_populates="iocs")
     phish = relationship("Phish", back_populates="iocs")
+    clusters = relationship("Cluster", secondary=cluster_iocs, back_populates="iocs")
 
 
 class Mitigation(Base):
