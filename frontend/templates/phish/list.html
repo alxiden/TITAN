@@ -39,51 +39,53 @@
     </div>
 
     {% if phishing_list %}
-    <table class="data-table">
-      <thead>
-        <tr>
-          <th>Subject</th>
-          <th>Sender</th>
-          <th>Target</th>
-          <th>Risk Level</th>
-          <th>Event</th>
-          <th>IOCs</th>
-          <th>Occurrence Date</th>
-          <th>Actions</th>
-        </tr>
-      </thead>
-      <tbody id="phish-tbody">
-        {% for phish in phishing_list %}
-        <tr>
-          <td><a href="/phishing/{{ phish.id }}">{{ phish.subject or '(No Subject)' }}</a></td>
-          <td>{{ phish.sender or '—' }}</td>
-          <td>{{ phish.target or '—' }}</td>
-          <td>
-            {% if phish.risk_level %}
-            <span class="badge badge-{{ phish.risk_level }}">{{ phish.risk_level|upper }}</span>
-            {% else %}
-            —
-            {% endif %}
-          </td>
-          <td>
-            {% if phish.event %}
-            <a href="/events/{{ phish.event.id }}">{{ phish.event.title }}</a>
-            {% else %}
-            —
-            {% endif %}
-          </td>
-          <td>{{ phish.iocs|length }}</td>
-          <td>{{ (phish.occurrence_date or phish.created_at).strftime('%Y-%m-%d') }}</td>
-          <td class="actions">
-            <a href="/phish/{{ phish.id }}/edit" class="btn-small">Edit</a>
-            <form method="post" action="/phish/{{ phish.id }}/delete" style="display:inline">
-              <button type="submit" class="btn-small btn-danger" onclick="return confirm('Delete this phishing?')">Delete</button>
-            </form>
-          </td>
-        </tr>
-        {% endfor %}
-      </tbody>
-    </table>
+    <div class="table-responsive">
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th>Subject</th>
+            <th>Sender</th>
+            <th>Target</th>
+            <th>Risk Level</th>
+            <th>Event</th>
+            <th>IOCs</th>
+            <th>Occurrence Date</th>
+            <th>Actions</th>
+          </tr>
+        </thead>
+        <tbody id="phish-tbody">
+          {% for phish in phishing_list %}
+          <tr>
+            <td><a href="/phishing/{{ phish.id }}">{{ phish.subject or '(No Subject)' }}</a></td>
+            <td>{{ phish.sender or '—' }}</td>
+            <td>{{ phish.target or '—' }}</td>
+            <td>
+              {% if phish.risk_level %}
+              <span class="badge badge-{{ phish.risk_level }}">{{ phish.risk_level|upper }}</span>
+              {% else %}
+              —
+              {% endif %}
+            </td>
+            <td>
+              {% if phish.event %}
+              <a href="/events/{{ phish.event.id }}">{{ phish.event.title }}</a>
+              {% else %}
+              —
+              {% endif %}
+            </td>
+            <td>{{ phish.iocs|length }}</td>
+            <td>{{ (phish.occurrence_date or phish.created_at).strftime('%Y-%m-%d') }}</td>
+            <td class="actions">
+              <a href="/phish/{{ phish.id }}/edit" class="btn-small">Edit</a>
+              <form method="post" action="/phish/{{ phish.id }}/delete" style="display:inline">
+                <button type="submit" class="btn-small btn-danger" onclick="return confirm('Delete this phishing?')">Delete</button>
+              </form>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
     {% else %}
     <p class="muted">No phishing yet. <a href="/phishing/new/form">Add one</a>.</p>
     {% endif %}
