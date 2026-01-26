@@ -75,6 +75,7 @@
         </thead>
         <tbody>
           {% for malware in event.malware_instances %}
+          {% if malware.id %}
           <tr>
             <td>{{ malware.name }}</td>
             <td>{{ malware.family_ref.name if malware.family_ref else (malware.family or '—') }}</td>
@@ -87,6 +88,11 @@
               </form>
             </td>
           </tr>
+          {% else %}
+          <tr style="opacity: 0.5;">
+            <td colspan="4" style="color: red; font-weight: bold;">⚠️ Corrupted record (no ID): {{ malware.name or 'Unknown' }}</td>
+          </tr>
+          {% endif %}
           {% if malware.iocs %}
           <tr>
             <td colspan="4" style="padding-left:40px">
@@ -131,6 +137,7 @@
         </thead>
         <tbody>
           {% for phish in event.phishing_instances %}
+          {% if phish.id %}
           <tr>
             <td>{{ phish.subject or '—' }}</td>
             <td>{{ phish.sender or '—' }}</td>
@@ -144,6 +151,11 @@
               </form>
             </td>
           </tr>
+          {% else %}
+          <tr style="opacity: 0.5;">
+            <td colspan="5" style="color: red; font-weight: bold;">⚠️ Corrupted record (no ID): {{ phish.subject or 'Unknown' }}</td>
+          </tr>
+          {% endif %}
           {% if phish.iocs %}
           <tr>
             <td colspan="5" style="padding-left:40px">

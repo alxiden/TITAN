@@ -244,7 +244,7 @@ def parse_date(value: Optional[str]):
     value = value.strip()
     if not value:
         return None
-    # Support both ISO and common UK formats
+    # Support both ISO and common UK formats (including 2-digit years)
     fmts = [
         "%Y-%m-%d",
         "%Y-%m-%d %H:%M",
@@ -253,6 +253,10 @@ def parse_date(value: Optional[str]):
         "%d/%m/%Y %H:%M",
         "%d-%m-%Y",
         "%d-%m-%Y %H:%M",
+        "%d/%m/%y",  # 2-digit year e.g., 22/01/26
+        "%d/%m/%y %H:%M",
+        "%d-%m-%y",
+        "%d-%m-%y %H:%M",
     ]
     for fmt in fmts:
         try:
@@ -2541,8 +2545,22 @@ async def create_phish(
     
     session.add(phish)
     session.commit()
+    phish_id = phish.id
     session.close()
     return RedirectResponse(url=f"/events/{event_id}", status_code=303)
+
+
+@app.get("/phish/{id}", response_class=HTMLResponse)
+async def view_phish(request: Request, id: int):
+    session = get_session(DEFAULT_DB_PATH)
+    phish = session.query(Phish).filter(Phish.id == id).first()
+    if not phish:
+        session.close()
+        return "Not found", 404
+    template = env.get_template("phish/detail.html")
+    result = template.render(request=request, phish=phish)
+    session.close()
+    return result
 
 
 @app.get("/phish/{id}/edit", response_class=HTMLResponse)
@@ -2618,8 +2636,11 @@ async def delete_phish(id: int):
         event_id = phish.event_id
         session.delete(phish)
         session.commit()
-        return RedirectResponse(url=f"/events/{event_id}", status_code=303)
-    return RedirectResponse(url="/events", status_code=303)
+        redirect_url = f"/events/{event_id}" if event_id else "/phishing"
+        session.close()
+        return RedirectResponse(url=redirect_url, status_code=303)
+    session.close()
+    return RedirectResponse(url="/phishing", status_code=303)
 
 
 # IOC CRUD (linked to malware or phishing)
@@ -2698,23 +2719,54 @@ async def create_phish_ioc(
 
 
 @app.post("/ioc/{id}/delete")
-async def delete_ioc(id: int):
+async def delete_ioc(id: int, return_to: Optional[str] = None):
     session = get_session(DEFAULT_DB_PATH)
     ioc = session.query(IOC).filter(IOC.id == id).first()
+    
+    # If return_to is specified, use it
+    if return_to == "iocs":
+        if ioc:
+            session.delete(ioc)
+            session.commit()
+        session.close()
+        return RedirectResponse(url="/iocs", status_code=303)
+    
     if ioc:
+        # Determine redirect based on what the IOC is linked to
         if ioc.malware_id:
             malware = session.query(Malware).filter(Malware.id == ioc.malware_id).first()
+            malware_id = malware.id if malware else None
             event_id = malware.event_id if malware else None
+            session.delete(ioc)
+            session.commit()
+            session.close()
+            if malware_id:
+                if event_id:
+                    return RedirectResponse(url=f"/events/{event_id}", status_code=303)
+                else:
+                    return RedirectResponse(url=f"/malware/{malware_id}", status_code=303)
+            return RedirectResponse(url="/malware", status_code=303)
         elif ioc.phish_id:
             phish = session.query(Phish).filter(Phish.id == ioc.phish_id).first()
+            phish_id = phish.id if phish else None
             event_id = phish.event_id if phish else None
+            session.delete(ioc)
+            session.commit()
+            session.close()
+            if phish_id:
+                if event_id:
+                    return RedirectResponse(url=f"/events/{event_id}", status_code=303)
+                else:
+                    return RedirectResponse(url=f"/phish/{phish_id}", status_code=303)
+            return RedirectResponse(url="/phishing", status_code=303)
         else:
-            event_id = None
-        session.delete(ioc)
-        session.commit()
-        if event_id:
-            return RedirectResponse(url=f"/events/{event_id}", status_code=303)
-    return RedirectResponse(url="/events", status_code=303)
+            # Standalone IOC
+            session.delete(ioc)
+            session.commit()
+            session.close()
+            return RedirectResponse(url="/iocs", status_code=303)
+    session.close()
+    return RedirectResponse(url="/iocs", status_code=303)
 
 
 # Mitigation CRUD (linked to events)
@@ -3068,6 +3120,59 @@ async def new_standalone_phish_form(request: Request):
     result = template.render(request=request, phish=None, events=events, apts=apts, action="/phishing/new")
     session.close()
     return result
+
+
+@app.post("/phishing/auto-generate-iocs")
+async def auto_generate_phishing_iocs():
+    """Auto-generate IOCs from sender email addresses and domains for phishing records with 0 IOCs."""
+    import re
+    session = get_session(DEFAULT_DB_PATH)
+    
+    # Find all phishing records with no IOCs
+    all_phish = session.query(Phish).all()
+    phish_without_iocs = [p for p in all_phish if len(p.iocs) == 0]
+    
+    generated_count = 0
+    email_pattern = re.compile(r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$')
+    
+    for phish in phish_without_iocs:
+        if not phish.sender:
+            continue
+        
+        sender = phish.sender.strip()
+        
+        # Check if sender looks like an email address
+        if email_pattern.match(sender):
+            # Create IOC for the full email address
+            email_ioc = IOC(
+                type="email",
+                value=sender.lower(),
+                description=f"Auto-generated from phishing: {phish.subject or 'No subject'}",
+                confidence=70,
+                phish_id=phish.id
+            )
+            session.add(email_ioc)
+            generated_count += 1
+            
+            # Extract and create IOC for the domain
+            domain = sender.split('@')[1].lower()
+            domain_ioc = IOC(
+                type="domain",
+                value=domain,
+                description=f"Auto-generated from phishing sender domain: {phish.subject or 'No subject'}",
+                confidence=70,
+                phish_id=phish.id
+            )
+            session.add(domain_ioc)
+            generated_count += 1
+    
+    session.commit()
+    session.close()
+    
+    return RedirectResponse(
+        url=f"/phishing?iocs_generated={generated_count}",
+        status_code=303
+    )
 
 
 @app.post("/phishing/new")

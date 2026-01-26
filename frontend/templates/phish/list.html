@@ -14,8 +14,25 @@
   <main>
     <div class="toolbar">
       <h2>Phishing ({{ phishing_list|length }})</h2>
-      <a href="/phishing/new/form" class="btn btn-primary">+ Add Phishing</a>
+      <div>
+        <a href="/phishing/new/form" class="btn btn-primary">+ Add Phishing</a>
+        <form method="post" action="/phishing/auto-generate-iocs" style="display:inline">
+          <button type="submit" class="btn" onclick="return confirm('Auto-generate IOCs (email + domain) for all phishing records with 0 IOCs?')" title="Extract sender email and domain as IOCs for records without any IOCs">🤖 Auto-Generate IOCs</button>
+        </form>
+      </div>
     </div>
+    
+    <script>
+      const params = new URLSearchParams(window.location.search);
+      const generated = params.get('iocs_generated');
+      if (generated) {
+        const msg = document.createElement('div');
+        msg.style.cssText = 'padding:1rem; margin:1rem 0; background:#d4edda; color:#155724; border:1px solid #c3e6cb; border-radius:4px;';
+        msg.textContent = `✓ Successfully generated ${generated} IOCs from phishing sender emails and domains`;
+        document.querySelector('main').insertBefore(msg, document.querySelector('.form-group'));
+      }
+    </script>
+    
     <div class="form-group" style="max-width:420px; margin:0 0 1rem 0;">
       <label for="phish-search" class="muted">Search phishing</label>
       <input type="text" id="phish-search" placeholder="Type to filter by any column">

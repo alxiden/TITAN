@@ -41,16 +41,24 @@
           <td>{{ ioc.confidence or '—' }}</td>
           <td>
             {% if ioc.malware %}
-            Malware: <a href="/events/{{ ioc.malware.event_id }}">{{ ioc.malware.name }}</a>
+              {% if ioc.malware.event_id %}
+                Malware: <a href="/events/{{ ioc.malware.event_id }}">{{ ioc.malware.name }}</a>
+              {% else %}
+                Malware: <a href="/malware/{{ ioc.malware.id }}">{{ ioc.malware.name }}</a>
+              {% endif %}
             {% elif ioc.phish %}
-            Phishing: <a href="/events/{{ ioc.phish.event_id }}">{{ ioc.phish.subject or 'Phish #' + ioc.phish.id|string }}</a>
+              {% if ioc.phish.event_id %}
+                Phishing: <a href="/events/{{ ioc.phish.event_id }}">{{ ioc.phish.subject or 'Phish #' + ioc.phish.id|string }}</a>
+              {% else %}
+                Phishing: <a href="/phish/{{ ioc.phish.id }}">{{ ioc.phish.subject or 'Phish #' + ioc.phish.id|string }}</a>
+              {% endif %}
             {% else %}
             —
             {% endif %}
           </td>
           <td>{{ ioc.created_at.strftime('%Y-%m-%d') }}</td>
           <td class="actions">
-            <form method="post" action="/ioc/{{ ioc.id }}/delete" style="display:inline">
+            <form method="post" action="/ioc/{{ ioc.id }}/delete?return_to=iocs" style="display:inline">
               <button type="submit" class="btn-small btn-danger" onclick="return confirm('Delete this IOC?')">Delete</button>
             </form>
           </td>
